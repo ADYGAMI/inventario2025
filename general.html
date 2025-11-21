@@ -1,0 +1,674 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Análisis de Reducción de Error de Inventario Dinámico</title>
+
+    <!-- 
+        CLAVE PARA CORREGIR EL ERROR "tailwind is not defined":
+        El script de la CDN de Tailwind DEBE cargarse completamente antes 
+        de intentar acceder o configurar la variable 'tailwind.config'. 
+        Hemos asegurado que este script vaya primero.
+    -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- Configuración de Tailwind para usar la fuente Inter (DEBE IR DESPUÉS DE LA CDN) -->
+    <script>
+        // Esta configuración se aplica después de que la librería Tailwind se ha definido
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        // Se configura la fuente Inter como la principal
+                        sans: ['Inter', 'sans-serif'],
+                    },
+                }
+            }
+        }
+    </script>
+    
+    <!-- Carga de Chart.js para la visualización de datos -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@3.7.1/dist/chart.min.js"></script>
+    <!-- Carga de chartjs-plugin-zoom para la funcionalidad de zoom/pan -->
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@1.2.1/dist/chartjs-plugin-zoom.min.js"></script>
+    <style>
+        /* Estilos personalizados para el contenedor del gráfico */
+        .chart-container {
+            max-width: 100%;
+            height: 400px;
+        }
+        @media (min-width: 768px) {
+            .chart-container {
+                height: 500px;
+                max-width: 800px;
+            }
+        }
+        /* Clase para la transición de altura */
+        .collapsible-content {
+            transition: all 0.3s ease-in-out;
+            overflow: hidden;
+        }
+    </style>
+</head>
+<body class="bg-gray-50 p-4 sm:p-8 font-sans">
+
+    <div id="app" class="max-w-4xl mx-auto">
+        <header class="text-center mb-6 p-6 bg-white shadow-xl rounded-xl">
+            <h1 id="mainTitle" class="text-3xl sm:text-4xl font-extrabold text-blue-800 mb-2">
+                Análisis de Error de Inventario: Precio de Venta
+            </h1>
+            <p class="text-gray-600 text-lg">
+                Reducción de Error por Almacén (2024 vs 2025)
+            </p>
+        </header>
+        
+        <!-- Selector de Métrica -->
+        <div class="mb-8 p-4 bg-indigo-50 rounded-xl shadow-inner flex flex-col sm:flex-row items-center justify-center gap-4">
+            <label for="metric-selector" class="text-indigo-800 font-semibold text-lg whitespace-nowrap">
+                Seleccionar Métrica de Análisis:
+            </label>
+            <select id="metric-selector" class="block w-full sm:w-60 px-4 py-2 text-indigo-700 bg-white border border-indigo-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition duration-150">
+                <option value="Venta">Precio de Venta</option>
+                <option value="Costo">Costo de Adquisición</option>
+                <option value="Piezas">Piezas</option>
+            </select>
+        </div>
+        
+        <!-- Selector de Almacenes -->
+        <div class="mb-8 p-6 bg-white rounded-xl shadow-lg">
+            <h2 class="text-xl font-semibold text-gray-700 mb-3">
+                Filtrar Almacenes (Aplica a Gráficos y Tabla)
+            </h2>
+            <div id="warehouse-selector-container" class="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-5 gap-3">
+                <!-- Checkboxes will be inserted here by JS -->
+            </div>
+            <div class="flex justify-end mt-4 gap-2">
+                <button id="select-all-btn" class="text-sm px-3 py-1 border border-blue-400 text-blue-700 hover:bg-blue-50 rounded-full transition duration-150 shadow-sm">
+                    Seleccionar Todo
+                </button>
+                <button id="deselect-all-btn" class="text-sm px-3 py-1 border border-red-400 text-red-700 hover:bg-red-50 rounded-full transition duration-150 shadow-sm">
+                    Deseleccionar Todo
+                </button>
+            </div>
+        </div>
+        <!-- Fin Selector de Almacenes -->
+
+        <main class="space-y-10">
+            <!-- Sección de Datos Colapsible -->
+            <div class="bg-white p-6 rounded-xl shadow-lg">
+                <!-- Encabezado de la tabla para alternar (tab) -->
+                <div id="tableToggle" class="flex justify-between items-center cursor-pointer hover:bg-gray-50 p-2 -m-2 rounded-lg transition duration-150">
+                    <h2 class="text-2xl font-semibold text-gray-700">
+                        Tabla de Datos de Error (<span id="tableMetricLabel">Precio de Venta</span>)
+                    </h2>
+                    <!-- Icono de flecha para indicar si está colapsado o no -->
+                    <svg id="toggleIcon" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-gray-500 transform transition-transform duration-300 rotate-0">
+                        <polyline points="6 9 12 15 18 9"></polyline>
+                    </svg>
+                </div>
+                
+                <!-- Contenido de la Tabla (ocultable) -->
+                <div id="tableContent" class="mt-4 collapsible-content">
+                    <p class="text-sm text-gray-500 mb-4">Nota: Los valores en la tabla representan el error neto (con signo). El porcentaje de reducción se calcula sobre el valor **absoluto** del error. (Datos solo para almacenes seleccionados)</p>
+                    <div class="overflow-x-auto">
+                        <table id="dataTable" class="min-w-full divide-y divide-gray-200 rounded-lg">
+                            <thead class="bg-blue-100">
+                                <tr>
+                                    <th class="px-3 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider text-left">Tienda</th>
+                                    <th class="px-3 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider text-center">Global 2024</th>
+                                    <th class="px-3 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider text-center">Global 2025</th>
+                                    <th class="px-3 py-3 text-xs font-medium text-blue-800 uppercase tracking-wider text-center">Reducción (%)</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tableBody" class="bg-white divide-y divide-gray-200">
+                                <!-- Data will be populated here by JS -->
+                            </tbody>
+                        </table>
+                    </div>
+                    <div id="summary" class="mt-4 p-3 bg-blue-50 rounded-lg text-sm text-blue-800">
+                        <!-- Summary will be populated here -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- Gráficos -->
+            <div id="chartSection">
+                <!-- GRÁFICO 1: Reducción % (Ahora es dinámico y único) -->
+                <div class="bg-white p-6 rounded-xl shadow-lg mb-8">
+                    <h2 class="text-2xl font-semibold text-gray-700 mb-4">
+                        Gráfico 1: Reducción de Error % (Almacenes Seleccionados)
+                    </h2>
+                    <div id="chartContainerFull" class="chart-container mx-auto">
+                        <canvas id="errorChartFull"></canvas>
+                    </div>
+                    <p class="text-xs text-gray-500 mt-2">Muestra la reducción porcentual del error absoluto para los almacenes actualmente seleccionados.</p>
+                </div>
+                
+                <!-- GRÁFICO 2: Comparativa de Montos Monetarios (Anteriormente Gráfico 3) -->
+                <div class="bg-white p-6 rounded-xl shadow-lg">
+                    <div class="flex justify-between items-center mb-4 flex-wrap gap-2">
+                        <h2 class="text-2xl font-semibold text-gray-700">
+                            Gráfico 2: Comparativa de Valores Netos (2024 vs 2025)
+                        </h2>
+                        <button id="resetMonetaryZoom" class="bg-indigo-500 hover:bg-indigo-600 text-white text-sm font-semibold py-2 px-4 rounded-full transition duration-150 shadow-md">
+                            Restablecer Zoom
+                        </button>
+                    </div>
+                    <div id="chartContainerMonetary" class="chart-container mx-auto">
+                        <canvas id="monetaryChart"></canvas>
+                    </div>
+                    <p class="text-xs text-gray-500 mt-2">Valores netos de error para cada año. **Utiliza la rueda del ratón (scroll) o el gesto de pinza para hacer zoom.**</p>
+                </div>
+            </div>
+        </main>
+        
+        <!-- Sección de Resumen Global (Valores Netos) -->
+        <div id="globalSummarySection" class="mt-10 p-6 bg-blue-900 text-white rounded-xl shadow-2xl">
+            <!-- Content will be populated by JS -->
+        </div>
+
+    </div>
+
+    <script>
+        // Define un formateador de moneda para USD
+        const currencyFormatter = new Intl.NumberFormat('en-US', {
+            style: 'currency',
+            currency: 'USD',
+            minimumFractionDigits: 2,
+        });
+        
+        // Mapeo de todos los datos (Precio de Venta, Costo, Piezas)
+        const allData = {
+            'Venta': {
+                label: 'Precio de Venta',
+                isMonetary: true,
+                data: [
+                    { tienda: 'ACUARIOS', global2024: 0.00, global2025: -38080.50 },
+                    { tienda: 'CEDIS', global2024: -21234.00, global2025: 24755.50 },
+                    { tienda: 'DAÑADOS', global2024: 346615.10, global2025: 3129.20 },
+                    { tienda: 'DP', global2024: -59991.00, global2025: -25799.00 },
+                    { tienda: 'LIVERPOOL', global2024: 0.00, global2025: -1011.28 },
+                    { tienda: 'MER LIB', global2024: -14360.50, global2025: -9669.50 },
+                    { tienda: 'MTY', global2024: -346634.50, global2025: -79720.59 },
+                    { tienda: 'MUNDO', global2024: -294117.50, global2025: -184592.50 },
+                    { tienda: 'OBREGON', global2024: -398772.50, global2025: -98231.12 },
+                    { tienda: 'PEL2', global2024: -139303.00, global2025: -30324.00 },
+                    { tienda: 'PEL2A', global2024: 2007.50, global2025: -34239.50 }, 
+                    { tienda: 'PEL3', global2024: -132883.50, global2025: -30711.18 },
+                    { tienda: 'SHOWROOM', global2024: 34971.50, global2025: -18802.46 },
+                    { tienda: 'TI DIGITAL', global2024: -89448.50, global2025: 4824.59 },
+                    { tienda: 'WEB', global2024: -57470.50, global2025: -21339.00 },
+                ]
+            },
+            'Costo': {
+                label: 'Costo de Adquisición',
+                isMonetary: true,
+                data: [
+                    // DATOS REALES DE COSTO DE ADQUISICIÓN ACTUALIZADOS
+                    { tienda: 'ACUARIOS', global2024: 0.00, global2025: -15991.10 },
+                    { tienda: 'CEDIS', global2024: -23241.73, global2025: 10974.87 },
+                    { tienda: 'DAÑADOS', global2024: 152050.26, global2025: -17278.83 },
+                    { tienda: 'DP', global2024: -22176.08, global2025: -12064.36 },
+                    { tienda: 'LIVERPOOL', global2024: 0.00, global2025: -1356.73 },
+                    { tienda: 'MER LIB', global2024: -7688.85, global2025: -1534.47 },
+                    { tienda: 'MTY', global2024: -168443.91, global2025: -35375.94 },
+                    { tienda: 'MUNDO', global2024: -129452.89, global2025: -80307.62 },
+                    { tienda: 'OBREGON', global2024: -188552.95, global2025: -38823.72 },
+                    { tienda: 'PEL2', global2024: -69328.07, global2025: -13767.28 },
+                    { tienda: 'PEL2A', global2024: 1674.11, global2025: -16729.33 },
+                    { tienda: 'PEL3', global2024: -61615.66, global2025: -15745.12 },
+                    { tienda: 'SHOWROOM', global2024: 10266.71, global2025: -7829.29 },
+                    { tienda: 'TI DIGITAL', global2024: -45063.77, global2025: -1414.70 },
+                    { tienda: 'WEB', global2024: -32758.58, global2025: -13468.49 },
+                ]
+            },
+            'Piezas': {
+                label: 'Piezas',
+                isMonetary: false,
+                data: [
+                    // DATOS REALES DE PIEZAS ACTUALIZADOS
+                    { tienda: 'ACUARIOS', global2024: 0, global2025: -179 },
+                    { tienda: 'CEDIS', global2024: -366, global2025: 146 },
+                    { tienda: 'DAÑADOS', global2024: 2457, global2025: 3 },
+                    { tienda: 'DP', global2024: -172, global2025: -601 },
+                    { tienda: 'LIVERPOOL', global2024: 0, global2025: -33 },
+                    { tienda: 'MER LIB', global2024: -498, global2025: -339 },
+                    { tienda: 'MTY', global2024: -2971, global2025: -592 },
+                    { tienda: 'MUNDO', global2024: -2862, global2025: -1407 },
+                    { tienda: 'OBREGON', global2024: -3929, global2025: -21 },
+                    { tienda: 'PEL2', global2024: -951, global2025: -314 },
+                    { tienda: 'PEL2A', global2024: -66, global2025: -321 },
+                    { tienda: 'PEL3', global2024: -1134, global2025: -322 },
+                    { tienda: 'SHOWROOM', global2024: -99, global2025: -73 },
+                    { tienda: 'TI DIGITAL', global2024: -1032, global2025: -222 },
+                    { tienda: 'WEB', global2024: -719, global2025: -215 },
+                ]
+            },
+        };
+        
+        let currentMetric = 'Venta';
+
+        // NUEVA FUNCIÓN: Obtener almacenes seleccionados
+        function getSelectedTiendas() {
+            const container = document.getElementById('warehouse-selector-container');
+            const checkboxes = container.querySelectorAll('input[type="checkbox"]:checked');
+            return Array.from(checkboxes).map(cb => cb.value);
+        }
+        
+        // Función auxiliar para formatear valores
+        function formatValue(value, isMonetary) {
+            if (isMonetary) {
+                return currencyFormatter.format(value);
+            }
+            // Para piezas, sin decimales ni símbolo
+            return value.toLocaleString('en-US', { maximumFractionDigits: 0 });
+        }
+
+        // Función de cálculo principal y procesamiento de datos para gráficos
+        function processData(data, selectedTiendas) {
+            // Filtrar data para incluir solo las tiendas seleccionadas
+            const dataToProcess = data.filter(item => selectedTiendas.includes(item.tienda));
+            
+            const processed = dataToProcess.map(item => {
+                // Usamos Math.abs() para obtener el valor absoluto del error
+                const abs2024 = Math.abs(item.global2024);
+                const abs2025 = Math.abs(item.global2025);
+                let reduction;
+
+                // Cálculo de la reducción de error (|A| - |B|) / |A| * 100
+                if (abs2024 === 0) {
+                    reduction = 'N/A';
+                } else {
+                    // El numerador es (Error Absoluto 2024 - Error Absoluto 2025)
+                    reduction = ((abs2024 - abs2025) / abs2024) * 100;
+                    reduction = parseFloat(reduction.toFixed(2));
+                }
+
+                return {
+                    ...item,
+                    reduction,
+                };
+            });
+
+            // Filtra los datos para el gráfico (excluyendo casos N/A)
+            const chartData = processed.filter(item => item.reduction !== 'N/A');
+
+            // Prepara los datos para Chart.js
+            const labels = chartData.map(item => item.tienda);
+            const dataValues = chartData.map(item => item.reduction);
+            const backgroundColors = dataValues.map(value => 
+                value >= 0 ? 'rgba(52, 211, 153, 0.8)' : 'rgba(252, 165, 165, 0.8)' // Verde para mejora, Rojo para empeoramiento
+            );
+            const borderColors = dataValues.map(value =>
+                value >= 0 ? 'rgba(52, 211, 153, 1)' : 'rgba(252, 165, 165, 1)'
+            );
+
+            return { processed, labels, dataValues, backgroundColors, borderColors };
+        }
+
+        function renderTable(data, metricConfig) {
+            const tableBody = document.getElementById('tableBody');
+            
+            tableBody.innerHTML = ''; // Limpiar tabla
+
+            // 1. Generar filas de la tabla
+            data.forEach(item => {
+                const row = tableBody.insertRow();
+                row.className = 'hover:bg-gray-50';
+
+                // Tienda
+                row.insertCell().textContent = item.tienda;
+
+                // Global 2024 (formato dinámico)
+                row.insertCell().textContent = formatValue(item.global2024, metricConfig.isMonetary);
+                row.cells[row.cells.length - 1].className = 'px-3 py-3 whitespace-nowrap text-sm text-gray-500 text-center';
+
+                // Global 2025 (formato dinámico)
+                row.insertCell().textContent = formatValue(item.global2025, metricConfig.isMonetary);
+                row.cells[row.cells.length - 1].className = 'px-3 py-3 whitespace-nowrap text-sm text-gray-500 text-center';
+
+                // Reducción (%)
+                const reductionCell = row.insertCell();
+                if (item.reduction === 'N/A') {
+                    reductionCell.textContent = 'N/A';
+                    reductionCell.className = 'px-3 py-3 whitespace-nowrap text-sm font-medium text-gray-400 text-center bg-yellow-50';
+                } else {
+                    // item.reduction es un número, por lo que toFixed(2) funciona correctamente.
+                    const reductionText = `${item.reduction.toFixed(2)}%`; 
+                    let colorClass = 'text-green-600';
+                    if (item.reduction < 0) {
+                        colorClass = 'text-red-600 font-bold';
+                    } else if (item.reduction === 0) {
+                        colorClass = 'text-gray-500';
+                    }
+                    reductionCell.textContent = reductionText;
+                    reductionCell.className = `px-3 py-3 whitespace-nowrap text-sm font-bold ${colorClass} text-center`;
+                }
+            });
+
+            // 2. Calcular y renderizar fila de TOTALES (Netos y Absolutos)
+            // IMPORTANTE: Los totales se calculan SÓLO sobre los almacenes filtrados en 'data'
+            const total2024 = data.reduce((sum, item) => sum + item.global2024, 0);
+            const total2025 = data.reduce((sum, item) => sum + item.global2025, 0);
+            
+            const absTotal2024 = data.reduce((sum, item) => sum + Math.abs(item.global2024), 0);
+            const absTotal2025 = data.reduce((sum, item) => sum + Math.abs(item.global2025), 0);
+            
+            const totalReduction = absTotal2024 === 0 ? 'N/A' : parseFloat(((absTotal2024 - absTotal2025) / absTotal2024) * 100).toFixed(2);
+
+            const totalRow = tableBody.insertRow();
+            totalRow.className = 'bg-blue-50 font-extrabold text-blue-900 border-t-2 border-blue-300';
+            totalRow.insertCell().textContent = 'TOTAL SELECCIONADO';
+            totalRow.insertCell().textContent = formatValue(total2024, metricConfig.isMonetary);
+            totalRow.cells[totalRow.cells.length - 1].className = 'px-3 py-3 whitespace-nowrap text-center';
+            totalRow.insertCell().textContent = formatValue(total2025, metricConfig.isMonetary);
+            totalRow.cells[totalRow.cells.length - 1].className = 'px-3 py-3 whitespace-nowrap text-center';
+            totalRow.insertCell().textContent = `${totalReduction}%`;
+            totalRow.cells[totalRow.cells.length - 1].className = 'px-3 py-3 whitespace-nowrap text-center';
+
+
+            // 3. Renderizar resumen debajo de la tabla
+            // Se utiliza 'data', que es el array ya procesado con el campo 'reduction'
+            const worsenedStores = data.filter(item => item.reduction !== 'N/A' && item.reduction < 0)
+                                        .map(item => `${item.tienda} (${item.reduction}%)`).join(', ');
+
+            const naStores = data.filter(item => item.reduction === 'N/A')
+                                 .map(item => item.tienda).join(', ');
+
+
+            document.getElementById('summary').innerHTML = `
+                <p class="font-bold mb-2">Resumen de Cálculo (Basado en Valor Absoluto) para Almacenes Seleccionados:</p>
+                <ul class="list-disc list-inside">
+                    <li>La **Reducción Total Absoluta** de Error es del **${totalReduction}%**.</li>
+                    <li>
+                        **Almacenes seleccionados con empeoramiento (Reducción < 0):** ${worsenedStores || 'Ninguno.'}
+                    </li>
+                    <li>
+                        **Almacenes seleccionados con Error Absoluto 2024 = 0 (N/A):** ${naStores || 'Ninguno.'}
+                    </li>
+                </ul>
+            `;
+        }
+        
+        // Función para renderizar el gráfico de Reducción (%)
+        function renderChart(canvasId, labels, dataValues, backgroundColors, borderColors, title) {
+            const ctx = document.getElementById(canvasId).getContext('2d');
+            
+            let chartInstance = window[`${canvasId}Instance`];
+            if (chartInstance) {
+                chartInstance.destroy();
+            }
+
+            window[`${canvasId}Instance`] = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: title,
+                        data: dataValues,
+                        backgroundColor: backgroundColors,
+                        borderColor: borderColors,
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                label: (context) => context.label + ': ' + context.parsed.y.toFixed(2) + '%'
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: false,
+                            title: { display: true, text: 'Reducción de Error (%)' },
+                            ticks: { callback: (value) => value + '%' }
+                        },
+                        x: { title: { display: false } }
+                    }
+                }
+            });
+        }
+        
+        // Función para renderizar el gráfico comparativo de valores netos
+        function renderNetValueChart(canvasId, data, metricConfig) {
+            const ctx = document.getElementById(canvasId).getContext('2d');
+            
+            let chartInstance = window[`${canvasId}Instance`];
+            if (chartInstance) {
+                chartInstance.destroy();
+            }
+
+            const labels = data.map(item => item.tienda);
+            const data2024 = data.map(item => item.global2024);
+            const data2025 = data.map(item => item.global2025);
+            const yAxisLabel = metricConfig.isMonetary ? 'Monto Monetario del Error (USD)' : 'Número de Piezas con Error';
+
+            window[`${canvasId}Instance`] = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        {
+                            label: 'Valor Neto 2024',
+                            data: data2024,
+                            backgroundColor: 'rgba(59, 130, 246, 0.7)', // blue-500
+                            borderColor: 'rgba(59, 130, 246, 1)',
+                            borderWidth: 1,
+                        },
+                        {
+                            label: 'Valor Neto 2025',
+                            data: data2025,
+                            backgroundColor: 'rgba(239, 68, 68, 0.7)', // red-500
+                            borderColor: 'rgba(239, 68, 68, 1)',
+                            borderWidth: 1,
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { position: 'top' },
+                        tooltip: {
+                            callbacks: {
+                                label: (context) => {
+                                    const label = context.dataset.label + ': ';
+                                    return label + formatValue(context.parsed.y, metricConfig.isMonetary);
+                                }
+                            }
+                        },
+                        zoom: {
+                            zoom: { wheel: { enabled: true }, pinch: { enabled: true }, mode: 'xy' },
+                            pan: { enabled: true, mode: 'xy' },
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: false,
+                            title: { display: true, text: yAxisLabel },
+                            ticks: {
+                                callback: (value) => {
+                                    // Formato simplificado para el eje Y
+                                    return formatValue(value, metricConfig.isMonetary).replace(/(\.00|\$)/g, '');
+                                }
+                            }
+                        },
+                        x: { title: { display: false } }
+                    }
+                }
+            });
+        }
+
+        // Función para renderizar el resumen global de totales netos (UTILIZA TODOS LOS DATOS)
+        function renderGlobalSummary(data, metricConfig) {
+            // Totales Netos (Suma de valores con signo)
+            const netTotal2024 = data.reduce((sum, item) => sum + item.global2024, 0);
+            const netTotal2025 = data.reduce((sum, item) => sum + item.global2025, 0);
+            
+            // Cambio Neto (2024 - 2025). Positivo = mejora en la posición neta.
+            const netChange = netTotal2024 - netTotal2025; 
+
+            // Totales Absolutos para obtener el porcentaje de magnitud de error
+            const absTotal2024 = data.reduce((sum, item) => sum + Math.abs(item.global2024), 0);
+            const absTotal2025 = data.reduce((sum, item) => sum + Math.abs(item.global2025), 0);
+            const totalReductionPercent = absTotal2024 === 0 ? 'N/A' : parseFloat(((absTotal2024 - absTotal2025) / absTotal2024) * 100).toFixed(2);
+            
+            const netChangeColorClass = netChange >= 0 ? 'text-green-400' : 'text-red-400';
+            const changeLabel = metricConfig.isMonetary ? 'Cambio Neto Monetario' : 'Cambio Neto en Piezas';
+
+            document.getElementById('globalSummarySection').innerHTML = `
+                <h2 class="text-2xl font-extrabold mb-4 border-b border-blue-700 pb-2">Resumen de Error Global (${metricConfig.label})</h2>
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 text-center">
+                    <div class="p-3 bg-blue-800 rounded-lg shadow-md">
+                        <p class="text-sm font-light opacity-80">Error Total Neto 2024 (Todos los Almacenes)</p>
+                        <p class="text-xl font-bold">${formatValue(netTotal2024, metricConfig.isMonetary)}</p>
+                    </div>
+                    <div class="p-3 bg-blue-800 rounded-lg shadow-md">
+                        <p class="text-sm font-light opacity-80">Error Total Neto 2025 (Todos los Almacenes)</p>
+                        <p class="text-xl font-bold">${formatValue(netTotal2025, metricConfig.isMonetary)}</p>
+                    </div>
+                    <div class="p-3 rounded-lg bg-blue-700 shadow-lg">
+                        <p class="text-sm font-light">${changeLabel}</p>
+                        <p class="text-2xl font-extrabold ${netChangeColorClass}">${formatValue(netChange, metricConfig.isMonetary)}</p>
+                        <p class="text-xs mt-1 text-blue-300">La **magnitud** absoluta del error global se redujo en **${totalReductionPercent}%**.</p>
+                    </div>
+                </div>
+            `;
+        }
+
+        // FUNCIÓN: Inicializar los selectores de almacén
+        function initializeWarehouseSelectors() {
+            const container = document.getElementById('warehouse-selector-container');
+            // Obtener la lista única y ordenada de tiendas
+            const tiendas = allData['Venta'].data.map(item => item.tienda).sort(); 
+            container.innerHTML = ''; // Limpiar
+
+            tiendas.forEach(tienda => {
+                const label = document.createElement('label');
+                label.className = 'flex items-center space-x-2 text-sm text-gray-600 cursor-pointer hover:text-indigo-700 transition duration-100';
+                
+                const input = document.createElement('input');
+                input.type = 'checkbox';
+                input.value = tienda;
+                input.checked = true; // Por defecto, todos seleccionados
+                input.className = 'form-checkbox h-4 w-4 text-indigo-600 rounded border-gray-300 focus:ring-indigo-500';
+                
+                // Agregar el listener de cambio para forzar la actualización del reporte
+                input.addEventListener('change', () => updateReport(currentMetric));
+                
+                label.appendChild(input);
+                label.appendChild(document.createTextNode(tienda));
+                container.appendChild(label);
+            });
+            
+            // Configurar botones de seleccionar/deseleccionar todo
+            const allCheckboxes = container.querySelectorAll('input[type="checkbox"]');
+            
+            document.getElementById('select-all-btn').addEventListener('click', () => {
+                allCheckboxes.forEach(cb => {
+                    cb.checked = true;
+                });
+                updateReport(currentMetric);
+            });
+            
+            document.getElementById('deselect-all-btn').addEventListener('click', () => {
+                allCheckboxes.forEach(cb => {
+                    cb.checked = false;
+                });
+                updateReport(currentMetric);
+            });
+        }
+        
+        // Función principal que actualiza todo el reporte
+        function updateReport(metricKey) {
+            currentMetric = metricKey;
+            const metricConfig = allData[currentMetric];
+            const allInitialData = metricConfig.data;
+            
+            // Obtener tiendas seleccionadas
+            const selectedTiendas = getSelectedTiendas();
+            
+            // Filtrar los datos iniciales ANTES de pasarlos a los gráficos/resúmenes de tienda
+            const filteredInitialData = allInitialData.filter(item => selectedTiendas.includes(item.tienda));
+            
+            // Actualizar títulos
+            document.getElementById('mainTitle').textContent = `Análisis de Error de Inventario: ${metricConfig.label}`;
+            document.getElementById('tableMetricLabel').textContent = metricConfig.label;
+
+            // 1. Renderizar Tabla y Resumen de Porcentajes (SOLO STORES SELECCIONADOS)
+            const { processed: tableData } = processData(filteredInitialData, selectedTiendas); 
+            renderTable(tableData, metricConfig);
+
+            // 2. Gráfico 1 (Reducción % Dinámico)
+            const { labels: reductionLabels, dataValues: reductionDataValues, backgroundColors: reductionBackgroundColors, borderColors: reductionBorderColors } = processData(filteredInitialData, selectedTiendas);
+            renderChart('errorChartFull', reductionLabels, reductionDataValues, reductionBackgroundColors, reductionBorderColors, `Reducción de Error % (Seleccionado)`);
+            
+            // 3. Gráfico 2: Comparativo de Valores Netos (SOLO STORES SELECCIONADOS)
+            renderNetValueChart('monetaryChart', filteredInitialData, metricConfig);
+
+            // 4. Resumen Global (UTILIZA TODOS LOS DATOS PARA CONTEXTO GLOBAL)
+            renderGlobalSummary(allInitialData, metricConfig); 
+        }
+
+        // NUEVA FUNCIÓN: Manejar el colapso de la tabla
+        function setupTableToggle() {
+            const toggleButton = document.getElementById('tableToggle');
+            const tableContent = document.getElementById('tableContent');
+            const toggleIcon = document.getElementById('toggleIcon');
+            
+            // Inicialmente, la tabla está abierta
+            
+            toggleButton.addEventListener('click', () => {
+                const isHidden = tableContent.classList.contains('hidden');
+                
+                if (isHidden) {
+                    // Mostrar
+                    tableContent.classList.remove('hidden');
+                    toggleIcon.classList.remove('rotate-180'); // Flecha hacia abajo
+                } else {
+                    // Ocultar
+                    tableContent.classList.add('hidden');
+                    toggleIcon.classList.add('rotate-180'); // Flecha hacia arriba
+                }
+            });
+        }
+
+
+        // Inicializar la aplicación al cargar la ventana
+        window.onload = () => {
+            const selector = document.getElementById('metric-selector');
+            
+            // Inicializar Selectores de Almacén
+            initializeWarehouseSelectors();
+            
+            // Inicializar la funcionalidad de colapsar la tabla
+            setupTableToggle();
+
+            // Listener para el selector de métrica
+            selector.addEventListener('change', (event) => {
+                updateReport(event.target.value);
+            });
+            
+            // Listener para el botón de Reset de Zoom
+            const resetBtn = document.getElementById('resetMonetaryZoom');
+            if (resetBtn) {
+                resetBtn.addEventListener('click', () => {
+                    const chartInstance = window['monetaryChartInstance'];
+                    if (chartInstance) {
+                        chartInstance.resetZoom();
+                    }
+                });
+            }
+            
+            // Renderizado inicial con la métrica por defecto ('Venta')
+            updateReport(selector.value);
+        };
+    </script>
+</body>
+</html>

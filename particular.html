@@ -1,0 +1,855 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reporte Gráfico de Inventario</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Chart.js CDN for graphics -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+    <style>
+        /* Configuración de fuentes y estilo general */
+        :root {
+            --primary-color: #10B981; /* Esmeralda 500 (Positivo) */
+            --secondary-color: #3B82F6; /* Azul 500 */
+            --negative-color: #EF4444; /* Rojo 500 (Negativo) */
+            --background-color: #F9FAFB; /* Gris claro */
+        }
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--background-color);
+        }
+        /* Estilo para tarjetas */
+        .card {
+            background-color: white;
+            border-radius: 1rem;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.06);
+            padding: 1.5rem;
+            transition: transform 0.2s;
+        }
+        .card:hover {
+            transform: translateY(-2px);
+        }
+        /* Estilos específicos de la tabla */
+        .table-container {
+            overflow-x: auto;
+            border-radius: 1rem;
+        }
+        .data-table th, .data-table td {
+            padding: 0.75rem 1rem;
+            text-align: right;
+            white-space: nowrap; /* Evita que las celdas se envuelvan */
+        }
+        .data-table th:first-child, .data-table td:first-child {
+            text-align: left;
+        }
+        .data-table tbody tr:nth-child(even) {
+            background-color: #F3F4F6; /* stripe effect */
+        }
+        .data-table .total-row {
+            background-color: #1F2937; /* Dark Gray/Slate */
+            color: white;
+            font-weight: bold;
+            border-top: 3px solid var(--primary-color);
+        }
+        .data-table .total-row td {
+            padding-top: 1rem;
+            padding-bottom: 1rem;
+        }
+    </style>
+</head>
+<body class="p-4 sm:p-8">
+
+    <div class="max-w-7xl mx-auto">
+        <!-- El título se actualiza dinámicamente -->
+        <h1 class="text-4xl font-extrabold text-gray-900 mb-2" id="main-title">Dashboard de Inventario 2025</h1>
+        <p class="text-lg text-gray-600 mb-8">Análisis de Faltantes y Sobrantes por Ubicación</p>
+
+        <!-- Bloque de Selectores de Análisis: Año y Métrica -->
+        <div class="card p-4 mb-8 flex flex-col md:flex-row md:space-x-8 space-y-4 md:space-y-0">
+            <!-- Selector de Año -->
+            <div>
+                <label for="year-select" class="block text-sm font-semibold text-gray-800 mb-2">Seleccionar Año de Inventario</label>
+                <select id="year-select" class="form-select block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-lg shadow-sm">
+                    <option value="2025">2025</option>
+                    <option value="2024">2024</option>
+                </select>
+            </div>
+
+            <!-- Selector de Métrica -->
+            <div>
+                <p class="text-sm font-semibold text-gray-800 mb-2">Métrica de Análisis</p>
+                <div id="metric-select" class="flex space-x-4">
+                    <!-- Los radio buttons se inyectarán aquí -->
+                </div>
+            </div>
+        </div>
+        
+        <!-- Sección de Filtros de Ubicación -->
+        <div class="card p-4 mb-8">
+            <h2 class="text-xl font-semibold text-gray-800">Filtro de Ubicaciones (Tiendas/Almacenes)</h2>
+
+            <!-- FILA DE BOTONES DE CONTROL (Seleccionar Todo / Deseleccionar Todo) -->
+            <div class="flex space-x-4 mb-4">
+                <button id="select-all-btn" class="bg-blue-500 hover:bg-blue-600 text-white font-semibold py-1 px-4 rounded-lg shadow-md transition duration-150 ease-in-out text-sm">
+                    Seleccionar Todo
+                </button>
+                <button id="deselect-all-btn" class="bg-gray-300 hover:bg-gray-400 text-gray-800 font-semibold py-1 px-4 rounded-lg shadow-md transition duration-150 ease-in-out text-sm">
+                    Deseleccionar Todo
+                </button>
+            </div>
+
+            <div id="location-filters" class="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-x-6 gap-y-3">
+                <!-- Checkboxes inyectados por JavaScript -->
+            </div>
+        </div>
+
+        <!-- Sección de Resumen General -->
+        <div id="summary-metrics" class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
+            <!-- Métrica 1: Total de Piezas/Valor Contadas (Inventario Final) -->
+            <div class="card border-l-4 border-emerald-500">
+                <p class="text-sm font-medium text-gray-500">Total de Piezas (Inv. Final)</p>
+                <p id="total-items" class="text-3xl font-bold text-gray-900 mt-1">0</p>
+            </div>
+            <!-- Métrica 2: Diferencia Neta de Piezas/Valor (Sobrantes - Faltantes) -->
+            <div class="card border-l-4 border-blue-500">
+                <p class="text-sm font-medium text-gray-500">Diferencia Neta de Piezas</p>
+                <p id="total-value" class="text-3xl font-bold text-gray-900 mt-1">0</p>
+            </div>
+            <!-- Métrica 3: Ubicaciones Contadas -->
+            <div class="card border-l-4 border-amber-500">
+                <p class="text-sm font-medium text-gray-500">Total de Ubicaciones Contadas</p>
+                <p id="low-stock-count" class="text-3xl font-bold text-gray-900 mt-1">0</p>
+            </div>
+        </div>
+
+        <!-- SECCIÓN DE TABLA DE DATOS (Con Toggle) -->
+        <div id="table-card" class="bg-white p-6 rounded-xl shadow-lg mb-10">
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-xl font-semibold text-gray-800">Detalle de Inventario por Ubicación (2025 - PIEZAS)</h2>
+                <!-- Botón de Ocultar/Mostrar Tabla -->
+                <button id="toggle-table-btn" class="text-blue-600 hover:text-blue-800 font-medium text-sm transition duration-150 ease-in-out px-3 py-1 rounded-lg hover:bg-blue-50">
+                    Ocultar Tabla
+                </button>
+            </div>
+            <!-- Contenedor que será ocultado/mostrado -->
+            <div id="table-content-wrapper" class="transition-all duration-300 ease-in-out overflow-hidden">
+                <div class="table-container">
+                    <table id="inventory-data-table" class="data-table w-full text-sm text-gray-700">
+                        <!-- Table content will be injected here by JavaScript -->
+                    </table>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Sección de Gráficos -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+            <!-- Gráfico 1: Diferencia Neta de Inventario por Ubicación (%) -->
+            <div class="card lg:col-span-2">
+                <!-- Se agregó un ID para acceso seguro desde JS -->
+                <h2 id="net-difference-chart-title" class="text-xl font-semibold text-gray-800 mb-4">Diferencia Neta de Inventario por Ubicación (%) - 2025</h2>
+                <!-- Contenedor para manejar el mensaje de "no datos" -->
+                <div id="chart-container-1" class="h-96">
+                    <canvas id="categoryValueChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Gráfico 2: Distribución de Inventario Final (Dona) -->
+            <div class="card">
+                <!-- Se agregó un ID para acceso seguro desde JS -->
+                <h2 id="distribution-chart-title" class="text-xl font-semibold text-gray-800 mb-4">Distribución de Piezas de Inventario Final (2025)</h2>
+                <!-- Contenedor para manejar el mensaje de "no datos" -->
+                <div id="chart-container-2" class="h-96 flex items-center justify-center">
+                    <canvas id="unitDistributionChart"></canvas>
+                </div>
+            </div>
+        </div>
+        
+    </div>
+
+    <script type="module">
+        // La clave de API se deja vacía según las instrucciones para el entorno.
+        const apiKey = ""; 
+        
+        // ** DECLARACIÓN DE DATOS **
+
+        // -----------------------------------------------------------
+        // DATOS 2025 (COMPLETOS)
+        // -----------------------------------------------------------
+
+        // Datos 2025 PIEZAS (datos base originales)
+        const data2025Pieces = [
+            { tienda: "ACUARIOS", invInicial: 13265, faltantesPiezas: -402, sobrantesPiezas: 223, invFinal: 13086, pctFaltantes: -3.03, pctSobrantes: 1.68, pctDiferenciaNeta: -1.35 },
+            { tienda: "CEDIS", invInicial: 211788, faltantesPiezas: -909, sobrantesPiezas: 1055, invFinal: 211934, pctFaltantes: -0.43, pctSobrantes: 0.50, pctDiferenciaNeta: 0.07 }, 
+            { tienda: "DAÑADOS", invInicial: 8201, faltantesPiezas: -1859, sobrantesPiezas: 1862, invFinal: 8204, pctFaltantes: -22.67, pctSobrantes: 22.70, pctDiferenciaNeta: 0.04 },
+            { tienda: "DP", invInicial: 10044, faltantesPiezas: -916, sobrantesPiezas: 315, invFinal: 9443, pctFaltantes: -9.12, pctSobrantes: 3.14, pctDiferenciaNeta: -5.98 },
+            { tienda: "LIVERPOOL", invInicial: 742, faltantesPiezas: -84, sobrantesPiezas: 51, invFinal: 709, pctFaltantes: -11.32, pctSobrantes: 6.87, pctDiferenciaNeta: -4.45 },
+            { tienda: "MER LIB", invInicial: 2241, faltantesPiezas: -454, sobrantesPiezas: 115, invFinal: 1902, pctFaltantes: -20.26, pctSobrantes: 5.13, pctDiferenciaNeta: -15.13 },
+            { tienda: "MTY", invInicial: 8851, faltantesPiezas: -958, sobrantesPiezas: 366, invFinal: 8259, pctFaltantes: -10.82, pctSobrantes: 4.14, pctDiferenciaNeta: -6.69 },
+            { tienda: "MUNDO", invInicial: 10961, faltantesPiezas: -1726, sobrantesPiezas: 319, invFinal: 9554, pctFaltantes: -15.75, pctSobrantes: 2.91, pctDiferenciaNeta: -12.84 },
+            { tienda: "OBREGON", invInicial: 81257, faltantesPiezas: -2622, sobrantesPiezas: 2601, invFinal: 81236, pctFaltantes: -3.23, pctSobrantes: 3.20, pctDiferenciaNeta: -0.03 },
+            { tienda: "PEL2", invInicial: 1603, faltantesPiezas: -419, sobrantesPiezas: 105, invFinal: 1289, pctFaltantes: -26.14, pctSobrantes: 6.55, pctDiferenciaNeta: -19.59 }, 
+            { tienda: "PEL2A", invInicial: 6879, faltantesPiezas: -630, sobrantesPiezas: 309, invFinal: 6558, pctFaltantes: -9.16, pctSobrantes: 4.49, pctDiferenciaNeta: -4.67 },
+            { tienda: "PEL3", invInicial: 8510, faltantesPiezas: -578, sobrantesPiezas: 256, invFinal: 8188, pctFaltantes: -6.79, pctSobrantes: 3.01, pctDiferenciaNeta: -3.78 },
+            { tienda: "SHOWROOM", invInicial: 1579, faltantesPiezas: -203, sobrantesPiezas: 130, invFinal: 1506, pctFaltantes: -12.86, pctSobrantes: 8.23, pctDiferenciaNeta: -4.62 },
+            { tienda: "TI DIGITAL", invInicial: 10007, faltantesPiezas: -978, sobrantesPiezas: 756, invFinal: 9785, pctFaltantes: -9.77, pctSobrantes: 7.55, pctDiferenciaNeta: -2.22 },
+            { tienda: "WEB", invInicial: 6095, faltantesPiezas: -391, sobrantesPiezas: 176, invFinal: 5880, pctFaltantes: -6.42, pctSobrantes: 2.89, pctDiferenciaNeta: -3.53 },
+        ];
+
+        // Datos 2025 COSTO (proporcionado por el usuario)
+        const data2025Costo = [
+            { tienda: "ACUARIOS", invInicial: 654472.69, faltantesPiezas: -26743.87, sobrantesPiezas: 10752.77, invFinal: 638481.59, pctFaltantes: -4.09, pctSobrantes: 1.64, pctDiferenciaNeta: -2.44 },
+            { tienda: "CEDIS", invInicial: 10392576.53, faltantesPiezas: -68444.29, sobrantesPiezas: 79419.16, invFinal: 10403551.40, pctFaltantes: -0.66, pctSobrantes: 0.76, pctDiferenciaNeta: 0.11 },
+            { tienda: "DAÑADOS", invInicial: 474074.70, faltantesPiezas: -127012.91, sobrantesPiezas: 109734.08, invFinal: 456795.87, pctFaltantes: -26.79, pctSobrantes: 23.15, pctDiferenciaNeta: -3.64 },
+            { tienda: "DP", invInicial: 551785.67, faltantesPiezas: -34331.97, sobrantesPiezas: 22267.61, invFinal: 539721.31, pctFaltantes: -6.22, pctSobrantes: 4.04, pctDiferenciaNeta: -2.19 },
+            { tienda: "LIVERPOOL", invInicial: 45911.82, faltantesPiezas: -5409.54, sobrantesPiezas: 4052.81, invFinal: 44555.09, pctFaltantes: -11.78, pctSobrantes: 8.83, pctDiferenciaNeta: -2.96 },
+            { tienda: "MER LIB", invInicial: 106324.72, faltantesPiezas: -10814.51, sobrantesPiezas: 9280.04, invFinal: 104790.25, pctFaltantes: -10.17, pctSobrantes: 8.73, pctDiferenciaNeta: -1.44 },
+            { tienda: "MTY", invInicial: 531996.11, faltantesPiezas: -58049.18, sobrantesPiezas: 22673.24, invFinal: 496620.17, pctFaltantes: -10.91, pctSobrantes: 4.26, pctDiferenciaNeta: -6.65 },
+            { tienda: "MUNDO", invInicial: 675314.26, faltantesPiezas: -101415.45, sobrantesPiezas: 21107.83, invFinal: 595006.64, pctFaltantes: -15.02, pctSobrantes: 3.13, pctDiferenciaNeta: -11.89 },
+            { tienda: "OBREGON", invInicial: 3913310.94, faltantesPiezas: -134873.30, sobrantesPiezas: 96049.58, invFinal: 3874487.22, pctFaltantes: -3.45, pctSobrantes: 2.45, pctDiferenciaNeta: -0.99},
+            { tienda: "PEL2", invInicial: 69533.17, faltantesPiezas: -17812.19, sobrantesPiezas: 4044.91, invFinal: 55765.89, pctFaltantes: -25.62, pctSobrantes: 5.82, pctDiferenciaNeta: -19.80 },
+            { tienda: "PEL2A", invInicial: 360175.05, faltantesPiezas: -29217.57, sobrantesPiezas: 12488.24, invFinal: 343445.72, pctFaltantes: -8.11, pctSobrantes: 3.47, pctDiferenciaNeta: -4.64 },
+            { tienda: "PEL3", invInicial: 494681.88, faltantesPiezas: -29093.46, sobrantesPiezas: 13348.34, invFinal: 478936.76, pctFaltantes: -5.88, pctSobrantes: 2.70, pctDiferenciaNeta: -3.18 },
+            { tienda: "SHOWROOM", invInicial: 122815.18, faltantesPiezas: -15773.28, sobrantesPiezas: 7943.99, invFinal: 114985.89, pctFaltantes: -12.84, pctSobrantes: 6.47, pctDiferenciaNeta: -6.37 },
+            { tienda: "TI DIGITAL", invInicial: 540535.41, faltantesPiezas: -47768.61, sobrantesPiezas: 46353.90, invFinal: 539120.70, pctFaltantes: -8.84, pctSobrantes: 8.58, pctDiferenciaNeta: -0.26 },
+            { tienda: "WEB", invInicial: 367561.70, faltantesPiezas: -28708.22, sobrantesPiezas: 15239.73, invFinal: 354093.21, pctFaltantes: -7.81, pctSobrantes: 4.15, pctDiferenciaNeta: -3.66 },
+        ];
+
+        // Datos 2025 PRECIO (proporcionado por el usuario)
+        const data2025Precio = [
+            { tienda: "ACUARIOS", invInicial: 1520091.50, faltantesPiezas: -59504.00, sobrantesPiezas: 21423.50, invFinal: 1482011.00, pctFaltantes: -3.91, pctSobrantes: 1.41, pctDiferenciaNeta: -2.51 },
+            { tienda: "CEDIS", invInicial: 25046938.96, faltantesPiezas: -154285.50, sobrantesPiezas: 179041.00, invFinal: 25071694.46, pctFaltantes: -0.62, pctSobrantes: 0.71, pctDiferenciaNeta: 0.10 },
+            { tienda: "DAÑADOS", invInicial: 932138.95, faltantesPiezas: -229630.80, sobrantesPiezas: 232760.00, invFinal: 935268.15, pctFaltantes: -24.63, pctSobrantes: 24.97, pctDiferenciaNeta: 0.34 },
+            { tienda: "DP", invInicial: 1198914.67, faltantesPiezas: -75366.50, sobrantesPiezas: 49567.50, invFinal: 1173115.67, pctFaltantes: -6.29, pctSobrantes: 4.13, pctDiferenciaNeta: -2.15 },
+            { tienda: "LIVERPOOL", invInicial: 103795.29, faltantesPiezas: -11235.35, sobrantesPiezas: 10224.07, invFinal: 102784.01, pctFaltantes: -10.82, pctSobrantes: 9.85, pctDiferenciaNeta: -0.97 },
+            { tienda: "MER LIB", invInicial: 213255.50, faltantesPiezas: -26230.00, sobrantesPiezas: 16560.50, invFinal: 203586.00, pctFaltantes: -12.30, pctSobrantes: 7.77, pctDiferenciaNeta: -4.53 },
+            { tienda: "MTY", invInicial: 1228404.84, faltantesPiezas: -133398.59, sobrantesPiezas: 53678.00, invFinal: 1148684.25, pctFaltantes: -10.86, pctSobrantes: 4.37, pctDiferenciaNeta: -6.49 },
+            { tienda: "MUNDO", invInicial: 1520653.67, faltantesPiezas: -234109.50, sobrantesPiezas: 49517.00, invFinal: 1336061.17, pctFaltantes: -15.40, pctSobrantes: 3.26, pctDiferenciaNeta: -12.14 },
+            { tienda: "OBREGON", invInicial: 8796612.17, faltantesPiezas: -313652.62, sobrantesPiezas: 215421.50, invFinal: 8694923.05, pctFaltantes: -3.57, pctSobrantes: 2.45, pctDiferenciaNeta: -1.12 },
+            { tienda: "PEL2", invInicial: 150726.05, faltantesPiezas: -38809.50, sobrantesPiezas: 8485.50, invFinal: 120402.05, pctFaltantes: -25.75, pctSobrantes: 5.63, pctDiferenciaNeta: -20.12 },
+            { tienda: "PEL2A", invInicial: 781797.94, faltantesPiezas: -65541.00, sobrantesPiezas: 31301.50, invFinal: 747558.44, pctFaltantes: -8.38, pctSobrantes: 4.00, pctDiferenciaNeta: -4.38 },
+            { tienda: "PEL3", invInicial: 1084514.02, faltantesPiezas: -62437.00, sobrantesPiezas: 31725.82, invFinal: 1053802.84, pctFaltantes: -5.76, pctSobrantes: 2.93, pctDiferenciaNeta: -2.83 },
+            { tienda: "SHOWROOM", invInicial: 263064.72, faltantesPiezas: -39672.00, sobrantesPiezas: 20869.54, invFinal: 244262.26, pctFaltantes: -15.08, pctSobrantes: 7.93, pctDiferenciaNeta: -7.15 },
+            { tienda: "TI DIGITAL", invInicial: 1291154.97, faltantesPiezas: -111289.57, sobrantesPiezas: 106464.98, invFinal: 1286330.38, pctFaltantes: -8.62, pctSobrantes: 8.25, pctDiferenciaNeta: -0.37 },
+            { tienda: "WEB", invInicial: 720935.00, faltantesPiezas: -53089.00, sobrantesPiezas: 31750.00, invFinal: 699596.00, pctFaltantes: -7.36, pctSobrantes: 4.40, pctDiferenciaNeta: -2.96 },
+        ];
+
+
+        // -----------------------------------------------------------
+        // DATOS 2024 (COMPLETOS)
+        // -----------------------------------------------------------
+
+        // DATOS REALES 2024 PIEZAS
+        const data2024Pieces = [
+            { tienda: "ACUARIOS", invInicial: 7338, faltantesPiezas: 0, sobrantesPiezas: 0, invFinal: 7338, pctFaltantes: 0.00, pctSobrantes: 0.00, pctDiferenciaNeta: 0.00 },
+            { tienda: "CEDIS", invInicial: 185317, faltantesPiezas: -3407, sobrantesPiezas: 3041, invFinal: 184951, pctFaltantes: -1.84, pctSobrantes: 1.64, pctDiferenciaNeta: -0.20 },
+            { tienda: "DAÑADOS", invInicial: 5912, faltantesPiezas: -3354, sobrantesPiezas: 5811, invFinal: 8369, pctFaltantes: -56.73, pctSobrantes: 98.29, pctDiferenciaNeta: 41.56 },
+            { tienda: "DP", invInicial: 9014, faltantesPiezas: -1195, sobrantesPiezas: 1023, invFinal: 8842, pctFaltantes: -13.26, pctSobrantes: 11.35, pctDiferenciaNeta: -1.91 },
+            { tienda: "LIVERPOOL", invInicial: 0, faltantesPiezas: 0, sobrantesPiezas: 0, invFinal: 0, pctFaltantes: 0.00, pctSobrantes: 0.00, pctDiferenciaNeta: 0.00 },
+            { tienda: "MER LIB", invInicial: 1301, faltantesPiezas: -578, sobrantesPiezas: 80, invFinal: 803, pctFaltantes: -44.43, pctSobrantes: 6.15, pctDiferenciaNeta: -38.28 },
+            { tienda: "MTY", invInicial: 12614, faltantesPiezas: -6526, sobrantesPiezas: 3555, invFinal: 9643, pctFaltantes: -51.74, pctSobrantes: 28.18, pctDiferenciaNeta: -23.56 },
+            { tienda: "MUNDO", invInicial: 11318, faltantesPiezas: -3435, sobrantesPiezas: 573, invFinal: 8456, pctFaltantes: -30.35, pctSobrantes: 5.06, pctDiferenciaNeta: -25.29 },
+            { tienda: "OBREGON", invInicial: 47533, faltantesPiezas: -6259, sobrantesPiezas: 2330, invFinal: 43604, pctFaltantes: -13.17, pctSobrantes: 4.90, pctDiferenciaNeta: -8.27 },
+            { tienda: "PEL2", invInicial: 6999, faltantesPiezas: -1330, sobrantesPiezas: 379, invFinal: 6048, pctFaltantes: -19.00, pctSobrantes: 5.42, pctDiferenciaNeta: -13.58 },
+            { tienda: "PEL2A", invInicial: 8336, faltantesPiezas: -555, sobrantesPiezas: 489, invFinal: 8270, pctFaltantes: -6.66, pctSobrantes: 5.87, pctDiferenciaNeta: -0.79 },
+            { tienda: "PEL3", invInicial: 7941, faltantesPiezas: -1456, sobrantesPiezas: 322, invFinal: 6807, pctFaltantes: -18.34, pctSobrantes: 4.05, pctDiferenciaNeta: -14.29 },
+            { tienda: "SHOWROOM", invInicial: 3493, faltantesPiezas: -811, sobrantesPiezas: 712, invFinal: 3394, pctFaltantes: -23.22, pctSobrantes: 20.38, pctDiferenciaNeta: -2.84 },
+            { tienda: "TI DIGITAL", invInicial: 2745, faltantesPiezas: -1279, sobrantesPiezas: 247, invFinal: 1713, pctFaltantes: -46.59, pctSobrantes: 9.00, pctDiferenciaNeta: -37.59 },
+            { tienda: "WEB", invInicial: 7905, faltantesPiezas: -1100, sobrantesPiezas: 381, invFinal: 7186, pctFaltantes: -13.92, pctSobrantes: 4.82, pctDiferenciaNeta: -9.10 },
+        ];
+
+        // DATOS REALES 2024 COSTO
+        const data2024Costo = [
+            { tienda: "ACUARIOS", invInicial: 386977.66, faltantesPiezas: 0.00, sobrantesPiezas: 0.00, invFinal: 386977.66, pctFaltantes: 0.00, pctSobrantes: 0.00, pctDiferenciaNeta: 0.00 },
+            { tienda: "CEDIS", invInicial: 9573826.09, faltantesPiezas: -246670.53, sobrantesPiezas: 223428.80, invFinal: 9550584.36, pctFaltantes: -2.58, pctSobrantes: 2.33, pctDiferenciaNeta: -0.25 },
+            { tienda: "DAÑADOS", invInicial: 372479.36, faltantesPiezas: -196265.17, sobrantesPiezas: 348315.43, invFinal: 524529.62, pctFaltantes: -52.69, pctSobrantes: 93.51, pctDiferenciaNeta: 40.82 },
+            { tienda: "DP", invInicial: 502940.61, faltantesPiezas: -72667.27, sobrantesPiezas: 50491.19, invFinal: 480764.53, pctFaltantes: -14.45, pctSobrantes: 10.04, pctDiferenciaNeta: -4.41 },
+            { tienda: "LIVERPOOL", invInicial: 0.00, faltantesPiezas: 0.00, sobrantesPiezas: 0.00, invFinal: 0.00, pctFaltantes: 0.00, pctSobrantes: 0.00, pctDiferenciaNeta: 0.00 },
+            { tienda: "MER LIB", invInicial: 55653.88, faltantesPiezas: -29133.84, sobrantesPiezas: 21444.99, invFinal: 47965.03, pctFaltantes: -52.35, pctSobrantes: 38.53, pctDiferenciaNeta: -13.82 },
+            { tienda: "MTY", invInicial: 715159.77, faltantesPiezas: -380752.53, sobrantesPiezas: 212308.62, invFinal: 546715.86, pctFaltantes: -53.24, pctSobrantes: 29.69, pctDiferenciaNeta: -23.55 },
+            { tienda: "MUNDO", invInicial: 616090.72, faltantesPiezas: -158846.33, sobrantesPiezas: 29393.44, invFinal: 486637.83, pctFaltantes: -25.78, pctSobrantes: 4.77, pctDiferenciaNeta: -21.01 },
+            { tienda: "OBREGON", invInicial: 2585748.15, faltantesPiezas: -343727.03, sobrantesPiezas: 155174.08, invFinal: 2397195.20, pctFaltantes: -13.29, pctSobrantes: 6.00, pctDiferenciaNeta: -7.29 },
+            { tienda: "PEL2", invInicial: 371613.72, faltantesPiezas: -87563.32, sobrantesPiezas: 18235.25, invFinal: 302285.65, pctFaltantes: -23.56, pctSobrantes: 4.91, pctDiferenciaNeta: -18.65 },
+            { tienda: "PEL2A", invInicial: 424668.90, faltantesPiezas: -26189.94, sobrantesPiezas: 27864.05, invFinal: 426343.01, pctFaltantes: -6.17, pctSobrantes: 6.56, pctDiferenciaNeta: 0.39 },
+            { tienda: "PEL3", invInicial: 454842.10, faltantesPiezas: -78011.67, sobrantesPiezas: 16396.01, invFinal: 393226.44, pctFaltantes: -17.15, pctSobrantes: 3.60, pctDiferenciaNeta: -13.55 },
+            { tienda: "SHOWROOM", invInicial: 176692.99, faltantesPiezas: -41497.39, sobrantesPiezas: 51764.10, invFinal: 186959.70, pctFaltantes: -23.49, pctSobrantes: 29.30, pctDiferenciaNeta: 5.81 },
+            { tienda: "TI DIGITAL", invInicial: 121471.21, faltantesPiezas: -56621.14, sobrantesPiezas: 11557.37, invFinal: 76407.44, pctFaltantes: -46.61, pctSobrantes: 9.51, pctDiferenciaNeta: -37.10 },
+            { tienda: "WEB", invInicial: 439149.33, faltantesPiezas: -57538.06, sobrantesPiezas: 24779.48, invFinal: 406390.75, pctFaltantes: -13.10, pctSobrantes: 5.64, pctDiferenciaNeta: -7.46 },
+        ];
+
+        // DATOS REALES 2024 PRECIO
+        const data2024Precio = [
+            { tienda: "ACUARIOS", invInicial: 837910.50, faltantesPiezas: 0.00, sobrantesPiezas: 0.00, invFinal: 837910.50, pctFaltantes: 0.00, pctSobrantes: 0.00, pctDiferenciaNeta: 0.00 },
+            { tienda: "CEDIS", invInicial: 23156608.50, faltantesPiezas: -522596.50, sobrantesPiezas: 501362.50, invFinal: 23135374.50, pctFaltantes: -2.26, pctSobrantes: 2.17, pctDiferenciaNeta: -0.09 },
+            { tienda: "DAÑADOS", invInicial: 747498.80, faltantesPiezas: -394573.00, sobrantesPiezas: 741188.10, invFinal: 1094113.90, pctFaltantes: -52.79, pctSobrantes: 99.16, pctDiferenciaNeta: 46.37 },
+            { tienda: "DP", invInicial: 1090339.25, faltantesPiezas: -167085.50, sobrantesPiezas: 107094.50, invFinal: 1030348.25, pctFaltantes: -15.32, pctSobrantes: 9.82, pctDiferenciaNeta: -5.50 },
+            { tienda: "LIVERPOOL", invInicial: 0.00, faltantesPiezas: 0.00, sobrantesPiezas: 0.00, invFinal: 0.00, pctFaltantes: 0.00, pctSobrantes: 0.00, pctDiferenciaNeta: 0.00 },
+            { tienda: "MER LIB", invInicial: 90677.00, faltantesPiezas: -47106.50, sobrantesPiezas: 32746.00, invFinal: 76316.50, pctFaltantes: -51.95, pctSobrantes: 36.11, pctDiferenciaNeta: -15.84 },
+            { tienda: "MTY", invInicial: 1561808.15, faltantesPiezas: -818138.65, sobrantesPiezas: 471504.15, invFinal: 1215173.65, pctFaltantes: -52.38, pctSobrantes: 30.19, pctDiferenciaNeta: -22.19 },
+            { tienda: "MUNDO", invInicial: 1392449.50, faltantesPiezas: -360969.00, sobrantesPiezas: 66851.50, invFinal: 1098332.00, pctFaltantes: -25.92, pctSobrantes: 4.80, pctDiferenciaNeta: -21.12 },
+            { tienda: "OBREGON", invInicial: 5979060.50, faltantesPiezas: -754155.00, sobrantesPiezas: 355382.50, invFinal: 5580288.00, pctFaltantes: -12.61, pctSobrantes: 5.94, pctDiferenciaNeta: -6.67 },
+            { tienda: "PEL2", invInicial: 820257.05, faltantesPiezas: -176211.00, sobrantesPiezas: 36908.00, invFinal: 680954.05, pctFaltantes: -21.48, pctSobrantes: 4.50, pctDiferenciaNeta: -16.98 },
+            { tienda: "PEL2A", invInicial: 943556.50, faltantesPiezas: -59171.00, sobrantesPiezas: 61178.50, invFinal: 945564.00, pctFaltantes: -6.27, pctSobrantes: 6.48, pctDiferenciaNeta: 0.21 },
+            { tienda: "PEL3", invInicial: 963067.05, faltantesPiezas: -165941.50, sobrantesPiezas: 33058.00, invFinal: 830183.55, pctFaltantes: -17.23, pctSobrantes: 3.43, pctDiferenciaNeta: -13.80 },
+            { tienda: "SHOWROOM", invInicial: 388979.50, faltantesPiezas: -91254.00, sobrantesPiezas: 126225.50, invFinal: 423951.00, pctFaltantes: -23.46, pctSobrantes: 32.45, pctDiferenciaNeta: 8.99 },
+            { tienda: "TI DIGITAL", invInicial: 231270.50, faltantesPiezas: -110575.00, sobrantesPiezas: 21126.50, invFinal: 141822.00, pctFaltantes: -47.81, pctSobrantes: 9.13, pctDiferenciaNeta: -38.68 },
+            { tienda: "WEB", invInicial: 788769.00, faltantesPiezas: -123171.50, sobrantesPiezas: 65701.00, invFinal: 731298.50, pctFaltantes: -15.62, pctSobrantes: 8.33, pctDiferenciaNeta: -7.29 },
+        ];
+
+
+        // Estructura de Datos Final
+        const inventoryFullData = {
+            '2025': {
+                'PIEZAS': data2025Pieces,
+                'COSTO': data2025Costo,
+                'PRECIO': data2025Precio,
+            },
+            '2024': {
+                'PIEZAS': data2024Pieces, 
+                'COSTO': data2024Costo,   
+                'PRECIO': data2024Precio, 
+            }
+        };
+
+        // Variables de estado global
+        let currentYear = '2025';
+        let currentMetric = 'PIEZAS';
+        
+        // Instancias globales de Chart.js
+        let netDifferenceChartInstance = null;
+        let unitDistributionChartInstance = null;
+
+        // Colores
+        const POSITIVE_COLOR = '#10B981'; 
+        const NEGATIVE_COLOR = '#EF4444'; 
+
+        // ** FUNCIONES DE FORMATO **
+
+        /**
+         * Formatea un número grande con separador de miles y opcionalmente como moneda.
+         * @param {number} num - Número a formatear.
+         * @param {boolean} isCurrency - Si es true, añade formato de moneda.
+         * @returns {string} Número formateado.
+         */
+        const formatNumber = (num, isCurrency = false) => {
+            const value = num || 0;
+            if (isCurrency) {
+                // Formato de moneda (se usa MXN como ejemplo)
+                return value.toLocaleString('es-MX', {
+                    style: 'currency',
+                    currency: 'MXN', 
+                    minimumFractionDigits: 2, // 2 decimales para moneda
+                    maximumFractionDigits: 2
+                });
+            }
+            // Formato de número entero con separadores de miles
+            return Math.round(value).toLocaleString('es-MX');
+        };
+
+        /**
+         * Formatea un porcentaje.
+         * @param {number} num - Porcentaje a formatear.
+         * @returns {string} Porcentaje formateado con signo.
+         */
+        const formatPercent = (num) => {
+            if (typeof num !== 'number' || isNaN(num)) return '0.00%';
+            const val = num.toFixed(2);
+            return (val > 0 ? '+' : '') + val + '%';
+        };
+
+        // ** FUNCIONES DE PROCESAMIENTO Y RENDERIZADO **
+
+        /**
+         * Procesa los datos del inventario para extraer métricas clave y datos para gráficos.
+         * @param {Array<Object>} data - El array de objetos del inventario (ya filtrado).
+         * @returns {Object} Un objeto con métricas y datos listos.
+         */
+        function processInventoryData(data) {
+            let totalInitial = 0;
+            let totalFinal = 0;
+            let totalFaltantes = 0;
+            let totalSobrantes = 0;
+            
+            data.forEach(item => {
+                // Hay que manejar los números de coma flotante si es moneda
+                const safeParse = (val) => parseFloat(val) || 0;
+
+                totalInitial += safeParse(item.invInicial);
+                // Si el inventario final no es un número (ej. para LIVERPOOL 2024) se calcula
+                let invFinalValue = safeParse(item.invFinal);
+                if (invFinalValue === 0 && item.invInicial > 0) {
+                     invFinalValue = item.invInicial + item.faltantesPiezas + item.sobrantesPiezas;
+                }
+                totalFinal += invFinalValue;
+
+                // NOTA: Los faltantes son números negativos en los datos
+                totalFaltantes += safeParse(item.faltantesPiezas); 
+                totalSobrantes += safeParse(item.sobrantesPiezas);
+            });
+            
+            const netDifference = totalSobrantes + totalFaltantes; 
+
+            // Cálculo de porcentajes para el total (basado en el valor/piezas iniciales)
+            const pctFaltantesTotal = totalInitial ? (totalFaltantes / totalInitial) * 100 : 0;
+            const pctSobrantesTotal = totalInitial ? (totalSobrantes / totalInitial) * 100 : 0;
+            const pctDiferenciaNetaTotal = pctSobrantesTotal + pctFaltantesTotal;
+
+            const totals = {
+                invInicial: totalInitial, 
+                faltantesPiezas: totalFaltantes,
+                sobrantesPiezas: totalSobrantes,
+                invFinal: totalFinal,
+                pctFaltantes: pctFaltantesTotal,
+                pctSobrantes: pctSobrantesTotal,
+                pctDiferenciaNeta: pctDiferenciaNetaTotal
+            };
+
+            const differenceLabels = data.map(item => item.tienda);
+            // Aseguramos que el valor sea el porcentaje que viene en el dato original
+            const differenceValues = data.map(item => item.pctDiferenciaNeta); 
+            const differenceColors = differenceValues.map(value => 
+                value >= 0 ? POSITIVE_COLOR : NEGATIVE_COLOR
+            );
+
+            const finalInventoryLabels = data.map(item => item.tienda);
+            const finalInventoryValues = data.map(item => item.invFinal);
+            const doughnutColors = [
+                '#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899', 
+                '#06B6D4', '#F97316', '#14B8A6', '#A855F7', '#D946EF', '#6B7280',
+                '#34D399', '#FB923C', '#22D3EE'
+            ];
+
+            return {
+                metrics: {
+                    totalFinalPiecesRaw: totalFinal,
+                    netPieceDifferenceRaw: netDifference, 
+                    locationCount: data.length,
+                },
+                charts: {
+                    netDifference: {
+                        labels: differenceLabels,
+                        values: differenceValues,
+                        colors: differenceColors
+                    },
+                    finalDistribution: {
+                        labels: finalInventoryLabels,
+                        values: finalInventoryValues,
+                        colors: doughnutColors.slice(0, finalInventoryLabels.length)
+                    }
+                },
+                totals: totals,
+            };
+        }
+        
+        /**
+         * Renderiza la tabla de datos del inventario.
+         */
+        function renderDataTable(data, totals) {
+            const tableElement = document.getElementById('inventory-data-table');
+            const isCurrency = currentMetric !== 'PIEZAS';
+            
+            const headers = [
+                "TIENDA", "INVENTARIO INICIAL", "FALTANTES", "SOBRANTES", 
+                "INVENTARIO FINAL", "% FALTANTES", "% SOBRANTES", "% DIFERENCIA NETA"
+            ];
+            
+            const headerRow = `<thead><tr class="bg-gray-100">${headers.map(h => `<th class="font-bold text-gray-600">${h}</th>`).join('')}</tr></thead>`;
+            
+            const bodyRows = data.map(item => `
+                <tr>
+                    <td>${item.tienda}</td>
+                    <td>${formatNumber(item.invInicial, isCurrency)}</td>
+                    <td class="${item.faltantesPiezas < 0 ? 'text-red-600 font-medium' : ''}">${formatNumber(item.faltantesPiezas, isCurrency)}</td>
+                    <td class="${item.sobrantesPiezas > 0 ? 'text-emerald-600 font-medium' : ''}">${formatNumber(item.sobrantesPiezas, isCurrency)}</td>
+                    <td>${formatNumber(item.invFinal, isCurrency)}</td>
+                    <td class="${item.pctFaltantes < 0 ? 'text-red-600 font-medium' : ''}">${formatPercent(item.pctFaltantes)}</td>
+                    <td class="${item.pctSobrantes > 0 ? 'text-emerald-600 font-medium' : ''}">${formatPercent(item.pctSobrantes)}</td>
+                    <td class="${item.pctDiferenciaNeta < 0 ? 'text-red-600 font-medium' : item.pctDiferenciaNeta > 0 ? 'text-emerald-600 font-medium' : ''}">${formatPercent(item.pctDiferenciaNeta)}</td>
+                </tr>
+            `).join('');
+            
+            const totalRow = `
+                <tr class="total-row">
+                    <td>TOTAL</td>
+                    <td>${formatNumber(totals.invInicial, isCurrency)}</td>
+                    <td>${formatNumber(totals.faltantesPiezas, isCurrency)}</td>
+                    <td>${formatNumber(totals.sobrantesPiezas, isCurrency)}</td>
+                    <td>${formatNumber(totals.invFinal, isCurrency)}</td>
+                    <td>${formatPercent(totals.pctFaltantes)}</td>
+                    <td>${formatPercent(totals.pctSobrantes)}</td>
+                    <td>${formatPercent(totals.pctDiferenciaNeta)}</td>
+                </tr>
+            `;
+
+            tableElement.innerHTML = headerRow + `<tbody>${bodyRows.length > 0 ? bodyRows : '<tr><td colspan="8" class="text-center py-4 text-gray-500">No hay datos para las ubicaciones seleccionadas.</td></tr>'}</tbody>` + `<tfoot>${totalRow}</tfoot>`;
+        }
+
+        /**
+         * Inicializa o actualiza el gráfico de Diferencia Neta (%) (Barra).
+         */
+        function renderNetDifferenceChart(chartData) {
+            const ctx = document.getElementById('categoryValueChart');
+            if (!ctx) return; 
+
+            if (netDifferenceChartInstance) {
+                netDifferenceChartInstance.destroy();
+            }
+
+            netDifferenceChartInstance = new Chart(ctx.getContext('2d'), {
+                type: 'bar',
+                data: {
+                    labels: chartData.labels,
+                    datasets: [{
+                        label: 'Diferencia Neta (%)',
+                        data: chartData.values,
+                        backgroundColor: chartData.colors,
+                        borderRadius: 6,
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: false,
+                            title: { display: true, text: 'Diferencia (%)' },
+                            ticks: {
+                                callback: function(value) { return value.toFixed(2) + '%'; }
+                            }
+                        }
+                    },
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) { return `Diferencia Neta: ${context.parsed.y.toFixed(2)}%`; }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        /**
+         * Inicializa o actualiza el gráfico de Distribución de Inventario Final (Dona).
+         */
+        function renderFinalDistributionChart(chartData) {
+            const ctx = document.getElementById('unitDistributionChart');
+            if (!ctx) return; 
+
+            if (unitDistributionChartInstance) {
+                unitDistributionChartInstance.destroy();
+            }
+            
+            const isCurrency = currentMetric !== 'PIEZAS';
+            const metricUnit = isCurrency ? ' valor' : ' piezas';
+
+            unitDistributionChartInstance = new Chart(ctx.getContext('2d'), {
+                type: 'doughnut',
+                data: {
+                    labels: chartData.labels,
+                    datasets: [{
+                        data: chartData.values,
+                        backgroundColor: chartData.colors,
+                        hoverOffset: 10,
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            labels: { usePointStyle: true, padding: 15 }
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    const label = context.label || '';
+                                    const value = context.parsed || 0;
+                                    const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                                    const percentage = total > 0 ? ((value / total) * 100).toFixed(2) + '%' : '0.00%';
+                                    return `${label}: ${formatNumber(value, isCurrency)}${metricUnit} (${percentage})`;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        /**
+         * Actualiza las tarjetas de métricas en el DOM y sus títulos.
+         */
+        function updateMetrics(metrics) {
+            const isCurrency = currentMetric !== 'PIEZAS';
+            
+            // 1. Actualizar títulos de las métricas
+            updateMetricLabels();
+
+            // 2. Actualizar valores
+            document.getElementById('total-items').textContent = formatNumber(metrics.totalFinalPiecesRaw, isCurrency);
+            
+            const netDiffElement = document.getElementById('total-value');
+            // Formato especial para la diferencia neta (si es moneda)
+            const formattedNetDiff = isCurrency 
+                ? formatNumber(metrics.netPieceDifferenceRaw, isCurrency)
+                : metrics.netPieceDifferenceRaw > 0 
+                    ? `+${formatNumber(metrics.netPieceDifferenceRaw, isCurrency)}` 
+                    : formatNumber(metrics.netPieceDifferenceRaw, isCurrency);
+
+            netDiffElement.textContent = formattedNetDiff;
+
+            const netDiffCard = netDiffElement.closest('.card');
+            netDiffCard.classList.remove('border-l-4', 'border-blue-500', 'border-red-500', 'border-emerald-500');
+            if (metrics.netPieceDifferenceRaw > 0) {
+                netDiffCard.classList.add('border-l-4', 'border-emerald-500');
+            } else if (metrics.netPieceDifferenceRaw < 0) {
+                netDiffCard.classList.add('border-l-4', 'border-red-500');
+            } else {
+                 netDiffCard.classList.add('border-l-4', 'border-blue-500');
+            }
+
+            document.getElementById('low-stock-count').textContent = metrics.locationCount.toLocaleString();
+        }
+
+        /**
+         * Actualiza los títulos del dashboard basados en el Año y la Métrica seleccionados.
+         */
+        function updateMetricLabels() {
+            const metricMap = {
+                'PIEZAS': { 
+                    totalTitle: 'Total de Piezas (Inv. Final)', 
+                    diffTitle: 'Diferencia Neta de Piezas',
+                    tableTitle: `Detalle de Inventario por Ubicación (${currentYear} - PIEZAS)`,
+                    chart2Title: `Distribución de Piezas de Inventario Final (${currentYear})`
+                },
+                'COSTO': { 
+                    totalTitle: 'Valor Total (Inv. Final)', 
+                    diffTitle: 'Diferencia Neta en Costo de Adquisición',
+                    tableTitle: `Detalle de Inventario por Ubicación (${currentYear} - COSTO)`,
+                    chart2Title: `Distribución de Costo de Inventario Final (${currentYear})`
+                },
+                'PRECIO': { 
+                    totalTitle: 'Valor Total (Inv. Final)', 
+                    diffTitle: 'Diferencia Neta en Precio de Venta',
+                    tableTitle: `Detalle de Inventario por Ubicación (${currentYear} - PRECIO)`,
+                    chart2Title: `Distribución de Precio de Inventario Final (${currentYear})`
+                },
+            };
+            
+            const selected = metricMap[currentMetric];
+            
+            // Títulos de las tarjetas de métricas - Añadidas comprobaciones de nulidad
+            const totalTitleEl = document.querySelector('#summary-metrics .card:nth-child(1) p:first-child');
+            if (totalTitleEl) totalTitleEl.textContent = selected.totalTitle;
+            
+            const diffTitleEl = document.querySelector('#summary-metrics .card:nth-child(2) p:first-child');
+            if (diffTitleEl) diffTitleEl.textContent = selected.diffTitle;
+            
+            // Título de la tabla
+            const tableTitleEl = document.querySelector('#table-card h2');
+            if (tableTitleEl) tableTitleEl.textContent = selected.tableTitle;
+
+            // Título general
+            const mainTitleEl = document.querySelector('#main-title');
+            if (mainTitleEl) mainTitleEl.textContent = `Dashboard de Inventario ${currentYear}`;
+            
+            // Título del Gráfico 1 (Diferencia Neta) - Usando nuevo ID
+            const chart1TitleEl = document.getElementById('net-difference-chart-title');
+            if (chart1TitleEl) chart1TitleEl.textContent = `Diferencia Neta de Inventario por Ubicación (%) - ${currentYear}`;
+
+            // Título del Gráfico 2 (Distribución) - Usando nuevo ID
+            const chart2TitleEl = document.getElementById('distribution-chart-title');
+            if (chart2TitleEl) chart2TitleEl.textContent = selected.chart2Title;
+        }
+
+        // ** FUNCIONES DE FILTRADO Y ESTADO **
+
+        /**
+         * Maneja la selección/deselección de todos los checkboxes de ubicación.
+         */
+        function setAllCheckboxes(selectAll) {
+            const filterContainer = document.getElementById('location-filters');
+            const checkboxes = filterContainer.querySelectorAll('input[type="checkbox"]');
+            checkboxes.forEach(cb => {
+                cb.checked = selectAll;
+            });
+            applyFilters();
+        }
+
+        /**
+         * Genera dinámicamente los checkboxes de filtro.
+         */
+        function initializeFilters(data) {
+            const filterContainer = document.getElementById('location-filters');
+            filterContainer.innerHTML = '';
+            
+            // Adjuntar eventos a los botones de control (Seleccionar/Deseleccionar Todo)
+            document.getElementById('select-all-btn').addEventListener('click', () => setAllCheckboxes(true));
+            document.getElementById('deselect-all-btn').addEventListener('click', () => setAllCheckboxes(false));
+            
+            const allLocations = [...new Set(data.map(item => item.tienda))].sort(); 
+
+            allLocations.forEach(location => {
+                const checkboxId = `filter-${location.replace(/\s/g, '-')}`;
+                
+                const filterItem = document.createElement('div');
+                filterItem.className = 'flex items-center space-x-2';
+                filterItem.innerHTML = `
+                    <input type="checkbox" id="${checkboxId}" value="${location}" checked 
+                           class="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-lg shadow-sm cursor-pointer">
+                    <label for="${checkboxId}" class="text-sm font-medium text-gray-700 cursor-pointer">${location}</label>
+                `;
+                
+                filterItem.querySelector('input').addEventListener('change', applyFilters);
+                filterContainer.appendChild(filterItem);
+            });
+        }
+
+        /**
+         * Inicializa los selectores de Métrica y Año.
+         */
+        function initializeMetricAndYearSelectors() {
+            // Selector de Año
+            document.getElementById('year-select').value = currentYear; // Asegura la inicialización correcta
+            document.getElementById('year-select').addEventListener('change', (e) => {
+                currentYear = e.target.value;
+                // Re-inicializa los filtros para asegurar que todas las ubicaciones se muestren si cambiamos de año
+                // Usamos el dataset de PIEZAS como base para la lista de ubicaciones
+                initializeFilters(inventoryFullData[currentYear]['PIEZAS']); 
+                applyFilters();
+            });
+
+            // Selector de Métrica (Radio Buttons)
+            const metricSelectContainer = document.getElementById('metric-select');
+            const metrics = [
+                { value: 'PIEZAS', label: 'Piezas', defaultChecked: true },
+                { value: 'COSTO', label: 'Costo' },
+                { value: 'PRECIO', label: 'Precio' }
+            ];
+
+            metrics.forEach(metric => {
+                const radioId = `metric-${metric.value}`;
+                const radioItem = document.createElement('div');
+                radioItem.className = 'flex items-center space-x-2';
+                radioItem.innerHTML = `
+                    <input type="radio" id="${radioId}" name="metric" value="${metric.value}" 
+                           ${metric.defaultChecked ? 'checked' : ''}
+                           class="h-4 w-4 text-blue-600 border-gray-300 focus:ring-blue-500 cursor-pointer">
+                    <label for="${radioId}" class="text-sm font-medium text-gray-700 cursor-pointer">${metric.label}</label>
+                `;
+                
+                radioItem.querySelector('input').addEventListener('change', (e) => {
+                    currentMetric = e.target.value;
+                    applyFilters();
+                });
+                metricSelectContainer.appendChild(radioItem);
+            });
+        }
+
+        /**
+         * Lee los filtros (Ubicación, Año, Métrica) y renderiza el dashboard con los datos filtrados.
+         */
+        function applyFilters() {
+            // 1. Obtener el dataset completo basado en Año y Métrica
+            const fullDataSet = inventoryFullData[currentYear][currentMetric];
+            
+            // 2. Obtener las ubicaciones seleccionadas
+            const filterContainer = document.getElementById('location-filters');
+            const checkboxes = filterContainer.querySelectorAll('input[type="checkbox"]');
+            
+            const selectedLocations = Array.from(checkboxes)
+                .filter(cb => cb.checked)
+                .map(cb => cb.value);
+
+            // 3. Filtrar el dataset por ubicación
+            const filteredData = fullDataSet.filter(item => 
+                selectedLocations.includes(item.tienda)
+            );
+
+            // 4. Renderizar el dashboard con los datos filtrados
+            renderDashboard(filteredData);
+        }
+
+        /**
+         * Renderiza todos los componentes del dashboard con el set de datos proporcionado.
+         */
+        function renderDashboard(data) {
+            const chartContainer1 = document.getElementById('chart-container-1');
+            const chartContainer2 = document.getElementById('chart-container-2');
+            const noDataMessage = '<p class="text-center text-gray-500 py-10 font-medium">Seleccione al menos una ubicación para ver los datos.</p>';
+
+            if (data.length === 0) {
+                // Caso: No hay datos seleccionados
+                updateMetricLabels(); // Mantiene los títulos actualizados aunque no haya datos
+                updateMetrics({ totalFinalPiecesRaw: 0, netPieceDifferenceRaw: 0, locationCount: 0 });
+                renderDataTable([], processInventoryData([]).totals);
+                
+                if (netDifferenceChartInstance) { netDifferenceChartInstance.destroy(); netDifferenceChartInstance = null; }
+                if (unitDistributionChartInstance) { unitDistributionChartInstance.destroy(); unitDistributionChartInstance = null; }
+
+                chartContainer1.innerHTML = noDataMessage;
+                chartContainer2.innerHTML = noDataMessage;
+                return; 
+            }
+            
+            // Caso: Hay datos seleccionados - restaurar canvas si fue reemplazado
+            if (chartContainer1.querySelector('canvas') === null) {
+                chartContainer1.innerHTML = '<canvas id="categoryValueChart"></canvas>';
+                chartContainer2.innerHTML = '<canvas id="unitDistributionChart"></canvas>';
+            }
+
+            const processedData = processInventoryData(data);
+
+            updateMetrics(processedData.metrics);
+            renderNetDifferenceChart(processedData.charts.netDifference);
+            renderFinalDistributionChart(processedData.charts.finalDistribution);
+            renderDataTable(data, processedData.totals);
+        }
+
+        // --- Funciones de Ocultar/Mostrar Tabla ---
+
+        /**
+         * Oculta o muestra el contenido de la tabla.
+         */
+        function toggleTableVisibility() {
+            const wrapper = document.getElementById('table-content-wrapper');
+            const button = document.getElementById('toggle-table-btn');
+            
+            // Usamos Tailwind's 'hidden' class para alternar visibilidad
+            const isHidden = wrapper.classList.toggle('hidden');
+
+            if (isHidden) {
+                button.textContent = 'Mostrar Tabla';
+            } else {
+                button.textContent = 'Ocultar Tabla';
+            }
+        }
+
+        /**
+         * Inicializa el control para ocultar/mostrar la tabla.
+         */
+        function initializeTableToggle() {
+            const button = document.getElementById('toggle-table-btn');
+            button.addEventListener('click', toggleTableVisibility);
+        }
+
+
+        /**
+         * Función de inicialización al cargar la página.
+         */
+        window.onload = () => {
+            initializeMetricAndYearSelectors();
+            // Inicializar filtros con la lista de ubicaciones completa de 2025 (PIEZAS)
+            initializeFilters(inventoryFullData['2025']['PIEZAS']); 
+            initializeTableToggle();
+            // Renderizar con la configuración inicial (2025/PIEZAS y todas las ubicaciones)
+            applyFilters(); 
+        };
+
+    </script>
+</body>
+</html>

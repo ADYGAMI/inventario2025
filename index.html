@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard Principal</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Iconos -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        
+        /* Efecto hover suave para el menú */
+        .menu-btn {
+            transition: all 0.3s ease;
+            border-left: 4px solid transparent;
+        }
+        .menu-btn:hover {
+            background-color: #f3f4f6;
+            padding-left: 1.5rem; /* Pequeño desplazamiento a la derecha */
+        }
+        .menu-btn.active {
+            background-color: #eff6ff; /* blue-50 */
+            color: #2563eb; /* blue-600 */
+            border-left: 4px solid #2563eb;
+            font-weight: 600;
+        }
+        
+        /* El iframe ocupará todo el espacio restante */
+        iframe {
+            width: 100%;
+            height: 100%;
+            border: none;
+        }
+    </style>
+</head>
+<body class="h-screen flex overflow-hidden bg-gray-100">
+
+    <!-- BARRA LATERAL (MENÚ) -->
+    <aside class="w-64 bg-white shadow-xl z-20 flex flex-col transition-transform duration-300 absolute md:relative h-full" id="sidebar">
+        <!-- Encabezado del Menú -->
+        <div class="p-6 border-b border-gray-100 flex items-center gap-3">
+            <div class="bg-blue-600 text-white p-2 rounded-lg shadow-lg">
+                <i class="fa-solid fa-chart-pie text-xl"></i>
+            </div>
+            <h1 class="text-xl font-bold text-gray-800 tracking-tight">Dashboard</h1>
+        </div>
+
+        <!-- Opciones de Navegación -->
+        <nav class="flex-1 p-4 space-y-2 overflow-y-auto">
+            <p class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2 pl-2">Reportes</p>
+            
+            <button onclick="loadPage('general.html', this)" class="menu-btn active w-full text-left px-4 py-3 rounded-r-lg flex items-center gap-3 text-gray-600 group">
+                <i class="fa-solid fa-layer-group group-hover:text-blue-500 transition-colors"></i>
+                <span>General</span>
+            </button>
+
+            <button onclick="loadPage('particular.html', this)" class="menu-btn w-full text-left px-4 py-3 rounded-r-lg flex items-center gap-3 text-gray-600 group">
+                <i class="fa-solid fa-magnifying-glass-chart group-hover:text-blue-500 transition-colors"></i>
+                <span>Particular</span>
+            </button>
+
+            <button onclick="loadPage('tamanos.html', this)" class="menu-btn w-full text-left px-4 py-3 rounded-r-lg flex items-center gap-3 text-gray-600 group">
+                <i class="fa-solid fa-ruler-combined group-hover:text-blue-500 transition-colors"></i>
+                <span>Tamaños</span>
+            </button>
+        </nav>
+
+        <!-- Pie del Menú -->
+        <div class="p-4 border-t border-gray-100">
+            <div class="bg-blue-50 p-4 rounded-xl text-sm text-blue-800">
+                <p class="font-bold mb-1">Estado del Sistema</p>
+                <div class="flex items-center gap-2">
+                    <span class="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
+                    <span class="text-xs">En línea</span>
+                </div>
+            </div>
+        </div>
+    </aside>
+
+    <!-- ÁREA PRINCIPAL -->
+    <div class="flex-1 flex flex-col h-full relative w-full">
+        
+        <!-- Barra Superior (Solo móvil) -->
+        <header class="bg-white shadow-sm p-4 md:hidden flex items-center justify-between z-10">
+            <span class="font-bold text-gray-800">Menú de Navegación</span>
+            <button onclick="toggleSidebar()" class="text-gray-600 focus:outline-none p-2 rounded hover:bg-gray-100">
+                <i class="fa-solid fa-bars text-xl"></i>
+            </button>
+        </header>
+
+        <!-- Contenedor de las páginas (IFRAME) -->
+        <main class="flex-1 bg-gray-50 relative overflow-hidden">
+            <!-- Aquí se cargan tus archivos html -->
+            <iframe id="contentFrame" src="general.html" title="Contenido Principal"></iframe>
+        </main>
+    </div>
+
+    <!-- SCRIPT DE CONTROL -->
+    <script>
+        // Función para cargar las páginas en el iframe
+        function loadPage(pageUrl, buttonElement) {
+            // 1. Cambiar la fuente del iframe
+            const iframe = document.getElementById('contentFrame');
+            
+            // Pequeño efecto de fade-out/fade-in
+            iframe.style.opacity = '0';
+            iframe.style.transition = 'opacity 0.2s ease';
+            
+            setTimeout(() => {
+                iframe.src = pageUrl;
+                iframe.onload = () => {
+                    iframe.style.opacity = '1';
+                };
+            }, 200);
+
+            // 2. Actualizar estilos de los botones (clase 'active')
+            // Remover clase activa de todos los botones
+            document.querySelectorAll('.menu-btn').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            
+            // Agregar clase activa al botón clickeado
+            if(buttonElement) {
+                buttonElement.classList.add('active');
+            }
+
+            // En móvil, cerrar el menú al seleccionar
+            if (window.innerWidth < 768) {
+                const sidebar = document.getElementById('sidebar');
+                sidebar.classList.add('-translate-x-full'); // Ocultar
+                sidebar.classList.remove('absolute'); // Reset posición si es necesario
+            }
+        }
+
+        // Función para abrir/cerrar menú en móvil
+        function toggleSidebar() {
+            const sidebar = document.getElementById('sidebar');
+            sidebar.classList.toggle('-translate-x-full');
+            
+            // Ajuste para que flote sobre el contenido en móvil
+            if (!sidebar.classList.contains('-translate-x-full')) {
+                sidebar.classList.add('absolute', 'h-full');
+            } else {
+                sidebar.classList.remove('absolute', 'h-full');
+            }
+        }
+
+        // Inicialización: Asegurar estado correcto en móvil al cargar
+        window.addEventListener('resize', () => {
+            const sidebar = document.getElementById('sidebar');
+            if (window.innerWidth >= 768) {
+                sidebar.classList.remove('-translate-x-full', 'absolute');
+            } else {
+                sidebar.classList.add('-translate-x-full');
+            }
+        });
+
+        // Ejecutar una vez al inicio para ajustar móvil
+        if (window.innerWidth < 768) {
+            document.getElementById('sidebar').classList.add('-translate-x-full');
+        }
+    </script>
+</body>
+</html>
