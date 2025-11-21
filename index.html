@@ -11,7 +11,6 @@
     <style>
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
         
-        /* Efecto hover suave para el menú */
         .menu-btn {
             transition: all 0.3s ease;
             border-left: 4px solid transparent;
@@ -21,8 +20,8 @@
             padding-left: 1.5rem;
         }
         .menu-btn.active {
-            background-color: #eff6ff; /* blue-50 */
-            color: #2563eb; /* blue-600 */
+            background-color: #eff6ff;
+            color: #2563eb;
             border-left: 4px solid #2563eb;
             font-weight: 600;
         }
@@ -32,18 +31,29 @@
             height: 100%;
             border: none;
         }
+        
+        /* Animación suave para el menú móvil */
+        .sidebar-mobile {
+            transition: transform 0.3s ease-in-out;
+        }
     </style>
 </head>
-<body class="h-screen flex overflow-hidden bg-gray-100 relative">
+<body class="h-screen flex overflow-hidden bg-gray-100">
+
+    <!-- OVERLAY OSCURO (Solo móvil) -->
+    <!-- Se muestra cuando el menú está abierto para oscurecer el fondo -->
+    <div id="mobile-overlay" onclick="closeSidebar()" class="fixed inset-0 bg-black bg-opacity-50 z-40 hidden md:hidden transition-opacity opacity-0"></div>
 
     <!-- BARRA LATERAL (MENÚ) -->
     <!-- 
-         CORRECCIÓN: 
-         1. Se agregó 'h-full' y 'absolute' de forma permanente para móvil.
-         2. 'md:relative' hace que en escritorio vuelva a comportarse como columna normal.
-         3. 'z-50' asegura que flote sobre todo en móvil.
+         CORRECCIÓN CLAVE:
+         - 'fixed inset-y-0 left-0': En móvil se queda pegado a la pantalla y flota sobre todo.
+         - 'md:relative': En escritorio vuelve a ser parte del flujo normal.
+         - '-translate-x-full': Empieza oculto en móvil.
+         - 'md:translate-x-0': Siempre visible en escritorio.
     -->
-    <aside class="w-64 bg-white shadow-xl z-50 flex flex-col transition-transform duration-300 absolute md:relative h-full border-r border-gray-200" id="sidebar">
+    <aside id="sidebar" class="sidebar-mobile fixed inset-y-0 left-0 z-50 w-64 bg-white shadow-2xl flex flex-col transform -translate-x-full md:relative md:translate-x-0 border-r border-gray-200">
+        
         <!-- Encabezado del Menú -->
         <div class="p-6 border-b border-gray-100 flex items-center justify-between gap-3">
             <div class="flex items-center gap-3">
@@ -52,13 +62,13 @@
                 </div>
                 <h1 class="text-xl font-bold text-gray-800 tracking-tight">Dashboard</h1>
             </div>
-            <!-- Botón cerrar solo visible en móvil dentro del menú -->
-            <button onclick="toggleSidebar()" class="md:hidden text-gray-500 hover:text-red-500 transition-colors">
+            <!-- Botón cerrar (Solo móvil) -->
+            <button onclick="closeSidebar()" class="md:hidden text-gray-500 hover:text-red-500 transition-colors p-2">
                 <i class="fa-solid fa-xmark text-xl"></i>
             </button>
         </div>
 
-        <!-- Opciones de Navegación -->
+        <!-- Navegación -->
         <nav class="flex-1 p-4 space-y-2 overflow-y-auto">
             <p class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2 pl-2">Reportes</p>
             
@@ -87,36 +97,56 @@
         </div>
     </aside>
 
-    <!-- ÁREA PRINCIPAL -->
-    <!-- Añadimos un overlay (fondo oscuro) opcional para móvil cuando el menú está abierto -->
-    <div id="mobile-overlay" onclick="toggleSidebar()" class="fixed inset-0 bg-black bg-opacity-50 z-40 hidden md:hidden glass"></div>
-
-    <div class="flex-1 flex flex-col h-full relative w-full transition-all duration-300">
+    <!-- CONTENIDO PRINCIPAL -->
+    <div class="flex-1 flex flex-col h-full w-full">
         
         <!-- Barra Superior (Solo móvil) -->
-        <header class="bg-white shadow-sm p-4 md:hidden flex items-center justify-between z-30 relative">
+        <header class="bg-white shadow-sm p-4 md:hidden flex items-center justify-between z-30">
             <div class="flex items-center gap-3">
-                <button onclick="toggleSidebar()" class="text-gray-600 focus:outline-none p-2 rounded hover:bg-gray-100 active:bg-gray-200 transition-colors">
+                <button onclick="openSidebar()" class="text-gray-600 focus:outline-none p-2 rounded hover:bg-gray-100 active:bg-gray-200 transition-colors">
                     <i class="fa-solid fa-bars text-xl"></i>
                 </button>
                 <span class="font-bold text-gray-800 text-lg">Menú</span>
             </div>
-            <div class="text-sm text-gray-500">v1.0</div>
         </header>
 
-        <!-- Contenedor de las páginas (IFRAME) -->
-        <main class="flex-1 bg-gray-50 relative overflow-hidden w-full h-full">
+        <!-- Iframe Contenedor -->
+        <main class="flex-1 bg-gray-50 relative overflow-hidden">
             <iframe id="contentFrame" src="general.html" title="Contenido Principal"></iframe>
         </main>
     </div>
 
-    <!-- SCRIPT DE CONTROL -->
+    <!-- LÓGICA JS MEJORADA -->
     <script>
+        const sidebar = document.getElementById('sidebar');
+        const overlay = document.getElementById('mobile-overlay');
+        let lastWidth = window.innerWidth;
+
+        function openSidebar() {
+            sidebar.classList.remove('-translate-x-full');
+            
+            // Mostrar overlay
+            overlay.classList.remove('hidden');
+            // Pequeño delay para permitir la transición de opacidad
+            setTimeout(() => overlay.classList.remove('opacity-0'), 10);
+        }
+
+        function closeSidebar() {
+            // Solo cerrar si estamos en modo móvil (para no romper escritorio si se llama por error)
+            if (window.innerWidth < 768) {
+                sidebar.classList.add('-translate-x-full');
+                overlay.classList.add('opacity-0');
+                setTimeout(() => overlay.classList.add('hidden'), 300); // Esperar a que termine la animación
+            }
+        }
+
         function loadPage(pageUrl, buttonElement) {
             const iframe = document.getElementById('contentFrame');
             
-            // Efecto fade
+            // Efecto visual de carga
             iframe.style.opacity = '0';
+            iframe.style.transition = 'opacity 0.2s ease';
+            
             setTimeout(() => {
                 iframe.src = pageUrl;
                 iframe.onload = () => { iframe.style.opacity = '1'; };
@@ -126,63 +156,30 @@
             document.querySelectorAll('.menu-btn').forEach(btn => btn.classList.remove('active'));
             if(buttonElement) buttonElement.classList.add('active');
 
-            // En móvil, cerrar menú automáticamente al seleccionar
-            if (window.innerWidth < 768) {
-                closeSidebar();
-            }
+            // Cerrar menú automáticamente en móvil
+            closeSidebar();
         }
 
-        function toggleSidebar() {
-            const sidebar = document.getElementById('sidebar');
-            const overlay = document.getElementById('mobile-overlay');
-            
-            // Simplemente alternamos la clase de traducción
-            const isClosed = sidebar.classList.contains('-translate-x-full');
-            
-            if (isClosed) {
-                openSidebar();
-            } else {
-                closeSidebar();
-            }
-        }
-
-        function openSidebar() {
-            const sidebar = document.getElementById('sidebar');
-            const overlay = document.getElementById('mobile-overlay');
-            sidebar.classList.remove('-translate-x-full');
-            overlay.classList.remove('hidden');
-        }
-
-        function closeSidebar() {
-            const sidebar = document.getElementById('sidebar');
-            const overlay = document.getElementById('mobile-overlay');
-            sidebar.classList.add('-translate-x-full');
-            overlay.classList.add('hidden');
-        }
-
-        // Inicialización
-        document.addEventListener('DOMContentLoaded', () => {
-            // Si es móvil, aseguramos que empiece cerrado
-            if (window.innerWidth < 768) {
-                closeSidebar();
-            }
-        });
-
-        // Ajustar al redimensionar ventana
+        // CORRECCIÓN DEL RESIZE:
+        // Solo reaccionamos si cruzamos la barrera de los 768px (cambio de móvil a escritorio o viceversa).
+        // Esto evita que el menú se cierre solo cuando la barra de direcciones del celular aparece/desaparece.
         window.addEventListener('resize', () => {
-            const sidebar = document.getElementById('sidebar');
-            const overlay = document.getElementById('mobile-overlay');
+            const currentWidth = window.innerWidth;
             
-            if (window.innerWidth >= 768) {
-                // Escritorio: siempre visible, sin overlay
+            // Si cambiamos de escritorio a móvil
+            if (lastWidth >= 768 && currentWidth < 768) {
+                closeSidebar(); // Empezar cerrado en móvil
+            }
+            
+            // Si cambiamos de móvil a escritorio
+            if (lastWidth < 768 && currentWidth >= 768) {
+                // Asegurar que el menú sea visible y limpiar overlay
                 sidebar.classList.remove('-translate-x-full');
                 overlay.classList.add('hidden');
-            } else {
-                // Móvil: empezamos cerrado si se redimensiona desde escritorio
-                // (Opcional: podrías querer mantener el estado, pero esto es más seguro)
-                sidebar.classList.add('-translate-x-full');
-                overlay.classList.add('hidden');
+                overlay.classList.add('opacity-0');
             }
+
+            lastWidth = currentWidth;
         });
     </script>
 </body>
