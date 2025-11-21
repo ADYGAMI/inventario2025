@@ -18,7 +18,7 @@
         }
         .menu-btn:hover {
             background-color: #f3f4f6;
-            padding-left: 1.5rem; /* Pequeño desplazamiento a la derecha */
+            padding-left: 1.5rem;
         }
         .menu-btn.active {
             background-color: #eff6ff; /* blue-50 */
@@ -27,7 +27,6 @@
             font-weight: 600;
         }
         
-        /* El iframe ocupará todo el espacio restante */
         iframe {
             width: 100%;
             height: 100%;
@@ -35,16 +34,28 @@
         }
     </style>
 </head>
-<body class="h-screen flex overflow-hidden bg-gray-100">
+<body class="h-screen flex overflow-hidden bg-gray-100 relative">
 
     <!-- BARRA LATERAL (MENÚ) -->
-    <aside class="w-64 bg-white shadow-xl z-20 flex flex-col transition-transform duration-300 absolute md:relative h-full" id="sidebar">
+    <!-- 
+         CORRECCIÓN: 
+         1. Se agregó 'h-full' y 'absolute' de forma permanente para móvil.
+         2. 'md:relative' hace que en escritorio vuelva a comportarse como columna normal.
+         3. 'z-50' asegura que flote sobre todo en móvil.
+    -->
+    <aside class="w-64 bg-white shadow-xl z-50 flex flex-col transition-transform duration-300 absolute md:relative h-full border-r border-gray-200" id="sidebar">
         <!-- Encabezado del Menú -->
-        <div class="p-6 border-b border-gray-100 flex items-center gap-3">
-            <div class="bg-blue-600 text-white p-2 rounded-lg shadow-lg">
-                <i class="fa-solid fa-chart-pie text-xl"></i>
+        <div class="p-6 border-b border-gray-100 flex items-center justify-between gap-3">
+            <div class="flex items-center gap-3">
+                <div class="bg-blue-600 text-white p-2 rounded-lg shadow-lg">
+                    <i class="fa-solid fa-chart-pie text-xl"></i>
+                </div>
+                <h1 class="text-xl font-bold text-gray-800 tracking-tight">Dashboard</h1>
             </div>
-            <h1 class="text-xl font-bold text-gray-800 tracking-tight">Dashboard</h1>
+            <!-- Botón cerrar solo visible en móvil dentro del menú -->
+            <button onclick="toggleSidebar()" class="md:hidden text-gray-500 hover:text-red-500 transition-colors">
+                <i class="fa-solid fa-xmark text-xl"></i>
+            </button>
         </div>
 
         <!-- Opciones de Navegación -->
@@ -68,99 +79,111 @@
         </nav>
 
         <!-- Pie del Menú -->
-        <div class="p-4 border-t border-gray-100">
-            <div class="bg-blue-50 p-4 rounded-xl text-sm text-blue-800">
-                <p class="font-bold mb-1">Estado del Sistema</p>
-                <div class="flex items-center gap-2">
-                    <span class="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
-                    <span class="text-xs">En línea</span>
-                </div>
+        <div class="p-4 border-t border-gray-100 bg-gray-50">
+            <div class="flex items-center gap-2 text-sm text-gray-600">
+                <span class="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
+                <span>Sistema en línea</span>
             </div>
         </div>
     </aside>
 
     <!-- ÁREA PRINCIPAL -->
-    <div class="flex-1 flex flex-col h-full relative w-full">
+    <!-- Añadimos un overlay (fondo oscuro) opcional para móvil cuando el menú está abierto -->
+    <div id="mobile-overlay" onclick="toggleSidebar()" class="fixed inset-0 bg-black bg-opacity-50 z-40 hidden md:hidden glass"></div>
+
+    <div class="flex-1 flex flex-col h-full relative w-full transition-all duration-300">
         
         <!-- Barra Superior (Solo móvil) -->
-        <header class="bg-white shadow-sm p-4 md:hidden flex items-center justify-between z-10">
-            <span class="font-bold text-gray-800">Menú de Navegación</span>
-            <button onclick="toggleSidebar()" class="text-gray-600 focus:outline-none p-2 rounded hover:bg-gray-100">
-                <i class="fa-solid fa-bars text-xl"></i>
-            </button>
+        <header class="bg-white shadow-sm p-4 md:hidden flex items-center justify-between z-30 relative">
+            <div class="flex items-center gap-3">
+                <button onclick="toggleSidebar()" class="text-gray-600 focus:outline-none p-2 rounded hover:bg-gray-100 active:bg-gray-200 transition-colors">
+                    <i class="fa-solid fa-bars text-xl"></i>
+                </button>
+                <span class="font-bold text-gray-800 text-lg">Menú</span>
+            </div>
+            <div class="text-sm text-gray-500">v1.0</div>
         </header>
 
         <!-- Contenedor de las páginas (IFRAME) -->
-        <main class="flex-1 bg-gray-50 relative overflow-hidden">
-            <!-- Aquí se cargan tus archivos html -->
+        <main class="flex-1 bg-gray-50 relative overflow-hidden w-full h-full">
             <iframe id="contentFrame" src="general.html" title="Contenido Principal"></iframe>
         </main>
     </div>
 
     <!-- SCRIPT DE CONTROL -->
     <script>
-        // Función para cargar las páginas en el iframe
         function loadPage(pageUrl, buttonElement) {
-            // 1. Cambiar la fuente del iframe
             const iframe = document.getElementById('contentFrame');
             
-            // Pequeño efecto de fade-out/fade-in
+            // Efecto fade
             iframe.style.opacity = '0';
-            iframe.style.transition = 'opacity 0.2s ease';
-            
             setTimeout(() => {
                 iframe.src = pageUrl;
-                iframe.onload = () => {
-                    iframe.style.opacity = '1';
-                };
+                iframe.onload = () => { iframe.style.opacity = '1'; };
             }, 200);
 
-            // 2. Actualizar estilos de los botones (clase 'active')
-            // Remover clase activa de todos los botones
-            document.querySelectorAll('.menu-btn').forEach(btn => {
-                btn.classList.remove('active');
-            });
-            
-            // Agregar clase activa al botón clickeado
-            if(buttonElement) {
-                buttonElement.classList.add('active');
-            }
+            // Actualizar botones activos
+            document.querySelectorAll('.menu-btn').forEach(btn => btn.classList.remove('active'));
+            if(buttonElement) buttonElement.classList.add('active');
 
-            // En móvil, cerrar el menú al seleccionar
+            // En móvil, cerrar menú automáticamente al seleccionar
             if (window.innerWidth < 768) {
-                const sidebar = document.getElementById('sidebar');
-                sidebar.classList.add('-translate-x-full'); // Ocultar
-                sidebar.classList.remove('absolute'); // Reset posición si es necesario
+                closeSidebar();
             }
         }
 
-        // Función para abrir/cerrar menú en móvil
         function toggleSidebar() {
             const sidebar = document.getElementById('sidebar');
-            sidebar.classList.toggle('-translate-x-full');
+            const overlay = document.getElementById('mobile-overlay');
             
-            // Ajuste para que flote sobre el contenido en móvil
-            if (!sidebar.classList.contains('-translate-x-full')) {
-                sidebar.classList.add('absolute', 'h-full');
+            // Simplemente alternamos la clase de traducción
+            const isClosed = sidebar.classList.contains('-translate-x-full');
+            
+            if (isClosed) {
+                openSidebar();
             } else {
-                sidebar.classList.remove('absolute', 'h-full');
+                closeSidebar();
             }
         }
 
-        // Inicialización: Asegurar estado correcto en móvil al cargar
-        window.addEventListener('resize', () => {
+        function openSidebar() {
             const sidebar = document.getElementById('sidebar');
-            if (window.innerWidth >= 768) {
-                sidebar.classList.remove('-translate-x-full', 'absolute');
-            } else {
-                sidebar.classList.add('-translate-x-full');
+            const overlay = document.getElementById('mobile-overlay');
+            sidebar.classList.remove('-translate-x-full');
+            overlay.classList.remove('hidden');
+        }
+
+        function closeSidebar() {
+            const sidebar = document.getElementById('sidebar');
+            const overlay = document.getElementById('mobile-overlay');
+            sidebar.classList.add('-translate-x-full');
+            overlay.classList.add('hidden');
+        }
+
+        // Inicialización
+        document.addEventListener('DOMContentLoaded', () => {
+            // Si es móvil, aseguramos que empiece cerrado
+            if (window.innerWidth < 768) {
+                closeSidebar();
             }
         });
 
-        // Ejecutar una vez al inicio para ajustar móvil
-        if (window.innerWidth < 768) {
-            document.getElementById('sidebar').classList.add('-translate-x-full');
-        }
+        // Ajustar al redimensionar ventana
+        window.addEventListener('resize', () => {
+            const sidebar = document.getElementById('sidebar');
+            const overlay = document.getElementById('mobile-overlay');
+            
+            if (window.innerWidth >= 768) {
+                // Escritorio: siempre visible, sin overlay
+                sidebar.classList.remove('-translate-x-full');
+                overlay.classList.add('hidden');
+            } else {
+                // Móvil: empezamos cerrado si se redimensiona desde escritorio
+                // (Opcional: podrías querer mantener el estado, pero esto es más seguro)
+                sidebar.classList.add('-translate-x-full');
+                overlay.classList.add('hidden');
+            }
+        });
     </script>
 </body>
 </html>
